@@ -1,0 +1,231 @@
+{
+  "status": "done",
+  "version": "lgbm-2026.10.27-1",
+  "evaluated_at": "2026-10-27T20:04:25",
+  "test_window": [
+    "2018-04-28",
+    "2018-06-02"
+  ],
+  "n": 99985,
+  "policy": "expected_loss",
+  "threshold": 21.8209127671866,
+  "policy_metrics": {
+    "overall": {
+      "n": 99985.0,
+      "fraud_rate": 0.03434515177276592,
+      "pr_auc": 0.22822839548593002,
+      "roc_auc": 0.8609311915188393,
+      "brier": NaN,
+      "recall_at_p50": 0.04950495049504951,
+      "precision_at_capacity": 0.24895238095238095,
+      "recall_at_capacity": 0.3806057076295865,
+      "fraud_value_caught_at_capacity": 0.6443220773823425,
+      "threshold": 21.8209127671866,
+      "alerts_per_day": 152.97142857142856,
+      "max_alerts_per_day": 210.0,
+      "precision_at_threshold": 0.250280164363093,
+      "recall_at_threshold": 0.39021549213744905,
+      "fraud_value_caught_at_threshold": 0.6545561003261205,
+      "tp": 1340.0,
+      "fp": 4014.0,
+      "fn": 2094.0,
+      "tn": 92537.0,
+      "missed_fraud_value": 178355.688,
+      "review_cost": 26770.0,
+      "friction_cost": 8028.0,
+      "total_cost": 213153.688,
+      "no_model_cost": 516308.692,
+      "net_savings": 303155.00399999996
+    },
+    "excl_fraud_uids": {
+      "n": 99322.0,
+      "fraud_rate": 0.03109079559412819,
+      "pr_auc": 0.21877517958228687,
+      "roc_auc": 0.8594714294609609,
+      "brier": NaN,
+      "recall_at_p50": 0.05019430051813471,
+      "precision_at_capacity": 0.23276190476190475,
+      "recall_at_capacity": 0.3957253886010363,
+      "fraud_value_caught_at_capacity": 0.6609921925459268,
+      "threshold": 21.8209127671866,
+      "alerts_per_day": 149.42857142857142,
+      "max_alerts_per_day": 202.0,
+      "precision_at_threshold": 0.23575525812619502,
+      "recall_at_threshold": 0.39928756476683935,
+      "fraud_value_caught_at_threshold": 0.6689999631159215,
+      "tp": 1233.0,
+      "fp": 3997.0,
+      "fn": 1855.0,
+      "tn": 92237.0,
+      "missed_fraud_value": 155233.33800000002,
+      "review_cost": 26150.0,
+      "friction_cost": 7994.0,
+      "total_cost": 189377.33800000002,
+      "no_model_cost": 468982.842,
+      "net_savings": 279605.50399999996
+    }
+  },
+  "probability_metrics": {
+    "overall": {
+      "pr_auc": 0.4542928973252242,
+      "roc_auc": 0.897480670648669,
+      "precision_at_capacity": 0.3617142857142857,
+      "fraud_value_caught_at_capacity": 0.47410962432528636,
+      "brier": 0.024100694184057827,
+      "pr_auc_uncalibrated": 0.4673592726337355,
+      "mean_prob": 0.04231534063899119,
+      "fraud_rate": 0.03434515177276592
+    },
+    "excl_fraud_uids": {
+      "pr_auc": 0.4551601208307041,
+      "roc_auc": 0.8973677247309856,
+      "precision_at_capacity": 0.33580952380952384,
+      "fraud_value_caught_at_capacity": 0.48541876506433046,
+      "brier": 0.02203780147509104
+    }
+  },
+  "comparison_threshold_free": {
+    "production LightGBM (lgbm-2026.10.27-1)": {
+      "overall": {
+        "pr_auc": 0.4542928973252242,
+        "roc_auc": 0.897480670648669,
+        "precision_at_capacity": 0.3617142857142857,
+        "fraud_value_caught_at_capacity": 0.47410962432528636
+      },
+      "excl_fraud_uids": {
+        "pr_auc": 0.4551601208307041,
+        "roc_auc": 0.8973677247309856,
+        "precision_at_capacity": 0.33580952380952384,
+        "fraud_value_caught_at_capacity": 0.48541876506433046
+      }
+    },
+    "XGBoost defaults": {
+      "overall": {
+        "pr_auc": 0.4402961860095848,
+        "roc_auc": 0.8753767619934909,
+        "precision_at_capacity": 0.33676190476190476,
+        "fraud_value_caught_at_capacity": 0.44352663154468064
+      },
+      "excl_fraud_uids": {
+        "pr_auc": 0.43432908857724645,
+        "roc_auc": 0.8759119425249184,
+        "precision_at_capacity": 0.30914285714285716,
+        "fraud_value_caught_at_capacity": 0.4438920176956068
+      }
+    },
+    "logistic regression": {
+      "overall": {
+        "pr_auc": 0.37203090191449406,
+        "roc_auc": 0.8516822342970135,
+        "precision_at_capacity": 0.3047619047619048,
+        "fraud_value_caught_at_capacity": 0.37205724206556645
+      },
+      "excl_fraud_uids": {
+        "pr_auc": 0.39629037641293674,
+        "roc_auc": 0.8658715193460328,
+        "precision_at_capacity": 0.30133333333333334,
+        "fraud_value_caught_at_capacity": 0.4027405079352562
+      }
+    },
+    "rule: amount > train p99": {
+      "overall": {
+        "pr_auc": 0.03629546768067239,
+        "roc_auc": 0.47387665583047245,
+        "precision_at_capacity": 0.05161904761904762,
+        "fraud_value_caught_at_capacity": 0.4311747476836978
+      },
+      "excl_fraud_uids": {
+        "pr_auc": 0.03293443277697005,
+        "roc_auc": 0.4690367864529475,
+        "precision_at_capacity": 0.048952380952380956,
+        "fraud_value_caught_at_capacity": 0.4499090182066831
+      }
+    }
+  },
+  "weekly": [
+    {
+      "week": 1,
+      "first_day": "2018-04-28",
+      "n": 21443,
+      "fraud_rate": 0.030779275287972765,
+      "pr_auc_prob": 0.5037315434593898,
+      "alerts_per_day": 150.42857142857142,
+      "precision_at_threshold": 0.23741690408357075,
+      "fraud_value_caught_at_threshold": 0.6183156061369282,
+      "net_savings": 47445.08899999999,
+      "no_model_cost": 87845.25
+    },
+    {
+      "week": 2,
+      "first_day": "2018-05-05",
+      "n": 19811,
+      "fraud_rate": 0.02851950936348493,
+      "pr_auc_prob": 0.40957369448763387,
+      "alerts_per_day": 142.71428571428572,
+      "precision_at_threshold": 0.23523523523523523,
+      "fraud_value_caught_at_threshold": 0.638421614221107,
+      "net_savings": 49158.04299999999,
+      "no_model_cost": 87216.726
+    },
+    {
+      "week": 3,
+      "first_day": "2018-05-12",
+      "n": 21038,
+      "fraud_rate": 0.034651582850080805,
+      "pr_auc_prob": 0.426381426617028,
+      "alerts_per_day": 162.85714285714286,
+      "precision_at_threshold": 0.23157894736842105,
+      "fraud_value_caught_at_threshold": 0.6496717616153475,
+      "net_savings": 58280.48299999999,
+      "no_model_cost": 101177.98999999999
+    },
+    {
+      "week": 4,
+      "first_day": "2018-05-19",
+      "n": 19941,
+      "fraud_rate": 0.036758437390301386,
+      "pr_auc_prob": 0.43195464259669647,
+      "alerts_per_day": 149.28571428571428,
+      "precision_at_threshold": 0.2574162679425837,
+      "fraud_value_caught_at_threshold": 0.6445624238648102,
+      "net_savings": 64264.591,
+      "no_model_cost": 110216.774
+    },
+    {
+      "week": 5,
+      "first_day": "2018-05-26",
+      "n": 17752,
+      "fraud_rate": 0.042079765660207304,
+      "pr_auc_prob": 0.5116001256130652,
+      "alerts_per_day": 159.57142857142858,
+      "precision_at_threshold": 0.288272157564906,
+      "fraud_value_caught_at_threshold": 0.7021981309915157,
+      "net_savings": 84006.79800000001,
+      "no_model_cost": 129851.952
+    }
+  ],
+  "validation_metrics": {
+    "overall": {
+      "pr_auc": 0.3499197050691693,
+      "precision_at_threshold": 0.3695116947066065,
+      "recall_at_threshold": 0.4706036059576692,
+      "alerts_per_day": 147.6969696969697,
+      "fraud_value_caught_at_threshold": 0.7095835324690927,
+      "net_savings": 433835.97099999996,
+      "total_cost": 220564.744
+    },
+    "excl_fraud_uids": {
+      "pr_auc": 0.32772803858517957,
+      "precision_at_threshold": 0.3403152666810624,
+      "recall_at_threshold": 0.48596978106691335,
+      "alerts_per_day": 140.33333333333334,
+      "fraud_value_caught_at_threshold": 0.7054583760779878,
+      "net_savings": 356884.2309999999,
+      "total_cost": 190489.28399999999
+    },
+    "pr_auc_uncalibrated": 0.5652532248246623,
+    "brier_uncalibrated": 0.023772390141250443,
+    "brier_calibrated": 0.023601113052528207
+  },
+  "period": "test"
+}

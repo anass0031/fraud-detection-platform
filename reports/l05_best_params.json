@@ -1,0 +1,64 @@
+{
+  "study": "lgbm-curated-l05",
+  "n_trials": 31,
+  "n_pruned": 13,
+  "folds": [
+    {
+      "train_days": [
+        1,
+        48
+      ],
+      "val_days": [
+        56,
+        70
+      ]
+    },
+    {
+      "train_days": [
+        1,
+        63
+      ],
+      "val_days": [
+        71,
+        85
+      ]
+    },
+    {
+      "train_days": [
+        1,
+        78
+      ],
+      "val_days": [
+        86,
+        100
+      ]
+    }
+  ],
+  "best_params": {
+    "num_leaves": 195,
+    "min_child_samples": 90,
+    "colsample_bytree": 0.45784775543558764,
+    "subsample": 0.7171658889770667,
+    "reg_alpha": 0.04947186313005263,
+    "reg_lambda": 0.027433169216697403,
+    "min_split_gain": 0.5841053279138717
+  },
+  "best_cv_pr_auc": 0.605965606503977,
+  "best_fold_scores": [
+    0.6509103393910836,
+    0.6482397251302139,
+    0.5187467549906335
+  ],
+  "best_iterations": [
+    568,
+    649,
+    179
+  ],
+  "final_n_estimators": 625,
+  "default_cv_pr_auc": 0.5905737447900692,
+  "default_fold_scores": [
+    0.6183635083569925,
+    0.6450443383076574,
+    0.5083133877055578
+  ]
+}
