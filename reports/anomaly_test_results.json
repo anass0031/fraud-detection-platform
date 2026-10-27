@@ -1,0 +1,68 @@
+{
+  "status": "done",
+  "period": "test",
+  "model": "lgbm-2026.10.27-1",
+  "anomaly": "iforest-2026.10.27-1",
+  "started_at": "2026-10-27T20:30:58",
+  "cutoff": 0.5976493446357406,
+  "safety_net": {
+    "overall": {
+      "n": 99985,
+      "fraud_rate": 0.03434515177276592,
+      "main_alerts_per_day": 152.97142857142856,
+      "main_fraud_value_caught": 0.6545561003261205,
+      "extra_alerts_per_day": 2.8285714285714287,
+      "extra_alerts_max_day": 8,
+      "extra_frauds": 1,
+      "extra_precision": 0.010101010101010102,
+      "extra_lift": 0.29410293970573526,
+      "share_of_missed_frauds_caught": 0.0004775549188156638,
+      "extra_fraud_value_caught": 0.0003389445165490261,
+      "combined_fraud_value_caught": 0.6548950448426696,
+      "main_net_savings": 303155.00399999996,
+      "combined_net_savings": 302639.00399999996,
+      "delta_net_savings": -516.0
+    },
+    "excl_fraud_uids": {
+      "n": 99322,
+      "fraud_rate": 0.03109079559412819,
+      "main_alerts_per_day": 149.42857142857142,
+      "main_fraud_value_caught": 0.6689999631159215,
+      "extra_alerts_per_day": 2.8,
+      "extra_alerts_max_day": 8,
+      "extra_frauds": 1,
+      "extra_precision": 0.01020408163265306,
+      "extra_lift": 0.32820265411864225,
+      "share_of_missed_frauds_caught": 0.0005390835579514825,
+      "extra_fraud_value_caught": 0.0003731479796866428,
+      "combined_fraud_value_caught": 0.669373111095608,
+      "main_net_savings": 279605.50399999996,
+      "combined_net_savings": 279096.50399999996,
+      "delta_net_savings": -509.0
+    }
+  },
+  "isolation_forest_alone": {
+    "pr_auc": 0.07422167459750958,
+    "flagged_share": 0.0014602190328549282,
+    "precision_flagged": 0.15753424657534246
+  },
+  "validation_metrics": {
+    "top_share": 0.005,
+    "population": "overall",
+    "n": 97344.0,
+    "fraud_rate": 0.039314184746877055,
+    "main_alerts_per_day": 147.6969696969697,
+    "main_fraud_value_caught": 0.7095835324690927,
+    "extra_alerts_per_day": 2.909090909090909,
+    "extra_alerts_max_day": 9.0,
+    "extra_frauds": 9.0,
+    "extra_precision": 0.09375,
+    "extra_lift": 2.384635484713875,
+    "share_of_missed_frauds_caught": 0.004442250740375123,
+    "extra_fraud_value_caught": 0.0011788327584574844,
+    "combined_fraud_value_caught": 0.7107623652275502,
+    "main_net_savings": 433835.97099999996,
+    "combined_net_savings": 433953.39999999997,
+    "delta_net_savings": 117.42900000000373
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "study": "lgbm-curated-l05",
+  "study": "lgbm-curated",
   "n_trials": 31,
   "n_pruned": 13,
   "folds": [

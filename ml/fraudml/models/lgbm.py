@@ -1,4 +1,6 @@
-"""LightGBM with fixed default settings (L04 compares imbalance strategies, not tuning).
+"""LightGBM with fixed default settings.
+
+The baseline comparison is about imbalance strategies, not tuning.
 
 Categorical columns use LightGBM's native categorical support (pandas `category` dtype, fixed
 category lists from the FeatureEncoder) and NaN is handled natively.

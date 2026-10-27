@@ -1,6 +1,6 @@
-# L05 findings: production model, calibration, alert policy, test results
+# Production model, calibration, alert policy and test results: findings
 
-Production model: **`lgbm-2026.10.27-1`**. It is LightGBM with default settings (500 trees, learning rate 0.05) on the 59 curated features, trained on the train period (2017-12-02 → 2018-03-11). Isotonic calibration and the alert threshold were fitted on the validation period (2018-03-19 → 2018-04-20). The test period (2018-04-28 → 2018-06-01) was evaluated **once**. Generated numbers: [`l05_validation.md`](l05_validation.md), [`l05_test_results.md`](l05_test_results.md).
+Production model: **`lgbm-2026.10.27-1`**. It is LightGBM with default settings (500 trees, learning rate 0.05) on the 59 curated features, trained on the train period (2017-12-02 → 2018-03-11). Isotonic calibration and the alert threshold were fitted on the validation period (2018-03-19 → 2018-04-20). The test period (2018-04-28 → 2018-06-01) was evaluated **once**. Generated numbers: [`model_validation.md`](model_validation.md), [`test_results.md`](test_results.md).
 
 ## 1. Tuning was rejected: its gain came from known fraudsters
 
@@ -38,13 +38,13 @@ The tuned model puts 62.5% of the frauds by customers already caught in train in
 - **The target is met:** 65.5% of fraud value is caught within capacity (target ≥ 50%).
 - **The ranking of models holds on test** (threshold-free): LightGBM 0.454 > XGBoost 0.440 > logistic regression 0.372 > amount rule 0.036.
 - **The model does not rely on repeat fraudsters:** excluding them gives the same PR-AUC (0.455).
-- **Drift:** PR-AUC drops from 0.559 to 0.454. The test weeks are 7–12 weeks after the end of training, and the EDA showed drifting features. Probabilities are slightly too high on test (mean 4.2% vs a 3.4% fraud rate), and alert volume overshoots a little (153/day). This motivates the drift monitoring (L12) and the retraining script (L13).
-- **Weekly stability:** fraud $ caught is 62–70% every week, and net savings cover 54–65% of the weekly fraud loss. There is no downward trend over the 5 test weeks ([figure](figures/l05_test_weekly.png)).
+- **Drift:** PR-AUC drops from 0.559 to 0.454. The test weeks are 7–12 weeks after the end of training, and the EDA showed drifting features. Probabilities are slightly too high on test (mean 4.2% vs a 3.4% fraud rate), and alert volume overshoots a little (153/day). This motivates drift monitoring and the retraining script.
+- **Weekly stability:** fraud $ caught is 62–70% every week, and net savings cover 54–65% of the weekly fraud loss. There is no downward trend over the 5 test weeks ([figure](figures/test_weekly.png)).
 
 ## Consequences for later steps
-- **L07 (SHAP):** explain the raw LightGBM output of `model.txt`; show the calibrated probability and the expected loss next to it.
-- **L08:** register `artifacts/models/lgbm-2026.10.27-1/` in `model_versions`. The score is calibrated p; the alert rule is p × amount ≥ $21.82.
-- **L10:** order the queue by expected loss and cap it at 150/day. The fixed threshold yields 210–242 alerts on peak days.
-- **L12/L13:** probability drift is visible on test, so the monitoring and retraining workflow is justified.
+- **Explanations (SHAP):** explain the raw LightGBM output of `model.txt`; show the calibrated probability and the expected loss next to it.
+- **Scoring API:** register `artifacts/models/lgbm-2026.10.27-1/` in `model_versions`. The score is calibrated p; the alert rule is p × amount ≥ $21.82.
+- **Review queue:** order the queue by expected loss and cap it at 150/day. The fixed threshold yields 210–242 alerts on peak days.
+- **Monitoring and retraining:** probability drift is visible on test, so the monitoring and retraining workflow is justified.
 
-![Test PR curves](figures/l05_test_pr_curves.png)
+![Test PR curves](figures/test_pr_curves.png)

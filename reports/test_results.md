@@ -1,4 +1,4 @@
-# L05 test-period results (lgbm-2026.10.27-1, evaluated once on 2026-10-27)
+# Test-period results (lgbm-2026.10.27-1, evaluated once on 2026-10-27)
 
 Alert policy `expected_loss` with threshold 21.82, fixed on validation.
 `pr_auc` in the first table is computed on the alert score (expected loss).

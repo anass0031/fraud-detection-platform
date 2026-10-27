@@ -1,4 +1,4 @@
-# EDA findings: IEEE-CIS Fraud Detection (Step L02)
+# EDA findings: IEEE-CIS Fraud Detection
 
 Source: `ml/notebooks/01_eda.ipynb` (executed 2026-10-27) · figures in `reports/figures/eda/` ·
 data: `data/processed/train.parquet` (labelled) and `test.parquet` (Kaggle test, no labels).
@@ -26,7 +26,7 @@ signals to give analysts meaningful explanations.
 - **Surprise:** *same* payer/recipient e-mail domain is riskier (9.7%) than *different* (2.9%). This is the opposite of the "mismatch = risk" assumption, so the initial design assumption was revised.
 - Best single numeric column: `C4`, ROC-AUC 0.69 (no column above 0.95).
 
-## Proposed time split (to implement in L03)
+## Proposed time split (implemented in the feature pipeline)
 | Period | Dates (inclusive) | Rows | Share | Fraud rate |
 |---|---|---|---|---|
 | train | 2017-12-02 → 2018-03-11 | 353,716 | 59.9% | 3.38% |
@@ -61,15 +61,15 @@ Gap rows are not used for training or scoring. They may be used as *history* for
 4. Rare categories can be memorised (e.g. one `DeviceInfo` model: 83% fraud over 203 rows).
 
 ## Rules and implications for the next steps
-**L03, features + split**
+**Features and split**
 - Implement the split above. Keep NaN, and add `has_identity` and `has_uid` / `addr1_missing` flags.
 - Prioritise readable engineered features: amount vs the card's own history, hour of day, product, card type, device type, e-mail domains (+ same-domain flag), 24 h velocity and novelty per uid, all computed **from past transactions only**.
 - Normalise `D` columns as `day − D`. Use the browser *family*, not the `id_31` version. Frequency-encode high-cardinality columns and group rare values.
 - **Forbidden:** past labels of the same uid/card as features (no "previous fraud", no target encoding by uid/card), and `uid` / `TransactionID` as raw features.
 
-**L04–L05, evaluation**
+**Evaluation**
 - PR-AUC + recall at precision + precision@150/day; per-week metrics on test.
 - Report test metrics **overall and excluding uids that had a fraud in train**. The second number is the honest one for new fraud.
 
-**L12, monitoring demo**
+**Monitoring demo**
 - Use `id_31` (browser version) and `D15` as the clear drift examples; amount/card features as the stable baseline.

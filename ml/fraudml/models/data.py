@@ -2,7 +2,7 @@
 
 meta holds what the evaluation needs but the model must never see: TransactionID, day index,
 exact TransactionAmt (for the cost model) and the `uid_fraud_in_train` flag.
-The test period is refused unless `allow_test=True` (it is evaluated once, in L05).
+The test period is refused unless `allow_test=True` (it is evaluated once, by evaluate_test.py).
 """
 
 from __future__ import annotations
@@ -64,7 +64,9 @@ def load_period(
     if period not in config.MODEL_PERIODS:
         raise ValueError(f"unknown period {period!r}")
     if period == "test" and not allow_test:
-        raise PermissionError("the test period is evaluated once, in L05 (pass allow_test=True)")
+        raise PermissionError(
+            "the test period is evaluated once, by evaluate_test.py (pass allow_test=True)"
+        )
     feat_path = config.PROCESSED_DIR / f"features_{period}.parquet"
     raw_path = config.PROCESSED_DIR / "train.parquet"  # Kaggle train file = all labelled rows
     READ_LOG.extend([str(feat_path), str(raw_path)])

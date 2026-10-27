@@ -1,7 +1,7 @@
-"""L05 S1: tune LightGBM with Optuna on forward-chaining folds inside the train period.
+"""Tune LightGBM with Optuna on forward-chaining folds inside the train period.
 
 The study is stored in SQLite, so an interrupted run resumes where it stopped.
-Writes reports/l05_best_params.json and reports/l05_tuning_trials.csv.
+Writes reports/tuning_best_params.json and reports/tuning_trials.csv.
 
 Usage (repo root):
     ml/.venv/Scripts/python ml/scripts/tune_lgbm.py [--trials 30]
@@ -21,7 +21,7 @@ from fraudml.models.cv import forward_folds
 from fraudml.models.tune import DEFAULT_PARAMS, final_n_estimators, make_objective
 
 SEED = 42
-STUDY = "lgbm-curated-l05"
+STUDY = "lgbm-curated"
 
 
 def main() -> None:
@@ -39,7 +39,7 @@ def main() -> None:
     store.mkdir(parents=True, exist_ok=True)
     study = optuna.create_study(
         study_name=STUDY,
-        storage=f"sqlite:///{(store / 'lgbm_l05.db').as_posix()}",
+        storage=f"sqlite:///{(store / 'lgbm_tuning.db').as_posix()}",
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=SEED),
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=0),
@@ -85,8 +85,8 @@ def main() -> None:
         "default_fold_scores": default.user_attrs.get("fold_scores"),
     }
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    (config.REPORTS_DIR / "l05_best_params.json").write_text(json.dumps(out, indent=2), "utf-8")
-    study.trials_dataframe().to_csv(config.REPORTS_DIR / "l05_tuning_trials.csv", index=False)
+    (config.REPORTS_DIR / "tuning_best_params.json").write_text(json.dumps(out, indent=2), "utf-8")
+    study.trials_dataframe().to_csv(config.REPORTS_DIR / "tuning_trials.csv", index=False)
     print(
         f"best trial {best.number}: cv PR-AUC {best.value:.4f} (defaults {default.value:.4f}) · "
         f"final trees {out['final_n_estimators']} · {time.perf_counter() - t0:.0f}s this run"

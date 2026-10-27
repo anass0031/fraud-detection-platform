@@ -1,11 +1,11 @@
-"""L05 S4: evaluate the saved production model on the test period, ONCE.
+"""Evaluate the saved production model on the test period, ONCE.
 
 Uses the artifact as saved (calibrator, alert policy and threshold all fixed on validation):
 nothing is re-fitted or re-tuned on test. Baselines (amount rule, logistic regression,
 XGBoost defaults) are re-trained on the train period for the PR-curve comparison only and get
 threshold-free metrics.
 
-A marker (reports/l05_test_results.json) is written BEFORE scoring; any later run is refused
+A marker (reports/test_results.json) is written BEFORE scoring; any later run is refused
 unless --force is given (which must be logged as a decision in PROGRESS.md).
 
 Usage (repo root):
@@ -39,11 +39,11 @@ from fraudml.models.xgb import gpu_available, make_xgb, predict_proba_cpu
 from fraudml.registry import MODELS_DIR, load_model
 
 SEED = 42
-MARKER = config.REPORTS_DIR / "l05_test_results.json"
+MARKER = config.REPORTS_DIR / "test_results.json"
 OUT = {
-    "pr": config.FIGURES_DIR / "l05_test_pr_curves.png",
-    "weekly": config.FIGURES_DIR / "l05_test_weekly.png",
-    "md": config.REPORTS_DIR / "l05_test_results.md",
+    "pr": config.FIGURES_DIR / "test_pr_curves.png",
+    "weekly": config.FIGURES_DIR / "test_weekly.png",
+    "md": config.REPORTS_DIR / "test_results.md",
 }
 
 
@@ -151,7 +151,7 @@ def main() -> None:
         OUT.update(pr=out / "pr.png", weekly=out / "weekly.png", md=out / "dryrun.md")
     elif MARKER.exists() and not args.force:
         raise SystemExit(f"test period already evaluated ({MARKER}); use --force and log why")
-    version = args.version or sorted(p.name for p in MODELS_DIR.iterdir() if p.is_dir())[-1]
+    version = args.version or sorted(p.name for p in MODELS_DIR.glob("lgbm-*") if p.is_dir())[-1]
     marker.write_text(
         json.dumps(
             {
@@ -249,7 +249,7 @@ def main() -> None:
         [{"model": n, "population": p, **v} for n, d in comparison.items() for p, v in d.items()]
     )
     md = [
-        f"# L05 test-period results ({version}, evaluated once on {result['evaluated_at'][:10]})",
+        f"# Test-period results ({version}, evaluated once on {result['evaluated_at'][:10]})",
         "",
         f"Alert policy `{meta['policy']}` with threshold {threshold:.4g}, fixed on validation.",
         "`pr_auc` in the first table is computed on the alert score (expected loss).",

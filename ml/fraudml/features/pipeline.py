@@ -101,7 +101,7 @@ FEATURES_CURATED: tuple[str, ...] = (
     *M_COLS,
 )
 
-# Extra raw masked columns for the single curated-vs-full comparison (L05, batch only).
+# Extra raw masked columns for the single curated-vs-full comparison (model selection, batch only).
 FULL_EXTRA_COLUMNS: tuple[str, ...] = (
     *(f"V{i}" for i in range(1, 340)),
     *(f"id_{i:02d}" for i in range(1, 12)),

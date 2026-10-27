@@ -1,4 +1,4 @@
-"""File-based model artifacts (L05). L08 registers these folders in the `model_versions` table.
+"""File-based model artifacts. The scoring API registers these folders in `model_versions`.
 
 artifacts/models/<version>/
     model.txt        LightGBM native text model (no pickle: portable and readable)
@@ -110,3 +110,67 @@ def load_model(version: str, root: Path = MODELS_DIR) -> LoadedModel:
     )
     metadata = json.loads((folder / "metadata.json").read_text("utf-8"))
     return LoadedModel(booster, calibrator, metadata)
+
+
+# ---------------- anomaly detector (Isolation Forest safety net) ----------------
+
+
+@dataclass
+class LoadedAnomaly:
+    model: object  # sklearn Pipeline
+    metadata: dict
+
+    @property
+    def cutoff(self) -> float:
+        return float(self.metadata["cutoff"])
+
+    def score(self, X: pd.DataFrame) -> np.ndarray:
+        """Higher = more unusual."""
+        return -self.model.score_samples(X[list(self.metadata["features"])])
+
+    def is_unusual(self, X: pd.DataFrame) -> np.ndarray:
+        return self.score(X) >= self.cutoff
+
+
+def save_anomaly(
+    model, metadata: dict, root: Path = MODELS_DIR, version: str | None = None
+) -> Path:
+    """Save the Isolation Forest pipeline with joblib (no portable text format exists).
+
+    The scikit-learn version is recorded: the loader must run the same version.
+    """
+    import joblib
+
+    for key in ("features", "cutoff", "top_share"):
+        if key not in metadata:
+            raise ValueError(f"metadata needs {key!r}")
+    version = version or next_version(root, algorithm="iforest")
+    folder = root / version
+    folder.mkdir(parents=True, exist_ok=False)
+    joblib.dump(model, folder / "model.joblib")
+    meta = {
+        "version": version,
+        "algorithm": "isolation_forest",
+        "created_at": dt.datetime.now().isoformat(timespec="seconds"),
+        "encoder_sha256": file_sha256(config.ARTIFACTS_DIR / "feature_encoder.json"),
+        "library_versions": {
+            "python": platform.python_version(),
+            "scikit-learn": sklearn.__version__,
+            "numpy": np.__version__,
+            "pandas": pd.__version__,
+        },
+        **metadata,
+    }
+    (folder / "metadata.json").write_text(json.dumps(meta, indent=2, default=float), "utf-8")
+    return folder
+
+
+def load_anomaly(version: str, root: Path = MODELS_DIR) -> LoadedAnomaly:
+    import joblib
+
+    folder = root / version
+    metadata = json.loads((folder / "metadata.json").read_text("utf-8"))
+    saved = metadata["library_versions"]["scikit-learn"]
+    if saved != sklearn.__version__:
+        raise RuntimeError(f"saved with scikit-learn {saved}, running {sklearn.__version__}")
+    return LoadedAnomaly(joblib.load(folder / "model.joblib"), metadata)

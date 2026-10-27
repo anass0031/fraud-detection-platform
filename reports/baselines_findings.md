@@ -1,6 +1,6 @@
-# L04 findings: baselines and imbalance strategies
+# Baselines and imbalance strategies: findings
 
-Validation period (2018-03-19 → 2018-04-20, 97,344 transactions, 3.93% fraud, 33 days). All models were trained on the train period only. The test period was not read. Full numbers: [`l04_comparison.md`](l04_comparison.md) (generated). Costs: $5 per review, $2 friction per false alarm, a missed fraud costs its amount, capacity 150 alerts/day.
+Validation period (2018-03-19 → 2018-04-20, 97,344 transactions, 3.93% fraud, 33 days). All models were trained on the train period only. The test period was not read. Full numbers: [`baselines_comparison.md`](baselines_comparison.md) (generated). Costs: $5 per review, $2 friction per false alarm, a missed fraud costs its amount, capacity 150 alerts/day.
 
 ## Results (overall population)
 
@@ -19,12 +19,12 @@ Without a model, validation fraud would cost $654k. Excluding customers who alre
 1. **LightGBM beats the baselines by a wide margin.** It scores +0.115 PR-AUC over logistic regression (bootstrap difference interval entirely below 0) and saves about $125k more on validation.
 2. **No resampling works best on ranking.** Class weights are clearly worse: −0.025 PR-AUC, interval [−0.035, −0.016]. They also inflate probabilities (Brier 0.077 vs 0.024). Undersampling is slightly worse: −0.011, interval [−0.021, −0.001]. Two other random draws scored 0.547 and 0.550. Its small savings lead ($352k vs $349k, under 1%) is within noise.
 3. **The probability correction works.** After undersampling, the corrected mean probability is 3.59%, against a 3.93% validation fraud rate.
-4. **Capacity is the binding constraint.** Every model's cost-optimal threshold uses the full 150/day budget (148/day on average). Without the cap, cost keeps falling until about 500 alerts/day. More review capacity would pay off, which is a useful business message for the defense ([cost curve](figures/l04_cost_curve.png)).
-5. **A fixed threshold overflows on peak days.** Average alerts stay at 148/day, but single days reach 215–241. The review queue (L10) must handle the overflow.
-6. **Amount matters for dollar metrics.** Ranking by amount alone catches 51% of fraud *value* in the daily top 150, more than logistic regression (40%) and close to LightGBM (56%). L05 should test ranking alerts by expected loss (calibrated probability × amount).
+4. **Capacity is the binding constraint.** Every model's cost-optimal threshold uses the full 150/day budget (148/day on average). Without the cap, cost keeps falling until about 500 alerts/day. More review capacity would pay off, which is a useful business message for the defense ([cost curve](figures/baselines_cost_curve.png)).
+5. **A fixed threshold overflows on peak days.** Average alerts stay at 148/day, but single days reach 215–241. The review queue must handle the overflow.
+6. **Amount matters for dollar metrics.** Ranking by amount alone catches 51% of fraud *value* in the daily top 150, more than logistic regression (40%) and close to LightGBM (56%). The model step should test ranking alerts by expected loss (calibrated probability × amount).
 
-## Decision for L05
+## Decision for the model step
 
 Tune **LightGBM on all training rows without class weights or resampling**, then calibrate (isotonic, on validation) and choose the cost-optimal threshold. Undersampling stays available as a speed option for Optuna trials (5× fewer rows, 2.5× faster training) if tuning time becomes a problem.
 
-![PR curves](figures/l04_pr_curves.png)
+![PR curves](figures/baselines_pr_curves.png)

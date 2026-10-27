@@ -4,7 +4,8 @@
 ordered by (TransactionDT, TransactionID), with columns:
 TransactionDT, TransactionAmt, device, p_email  (device / p_email normalised like the batch path).
 
-InMemoryHistory is used for tests and offline checks. A PostgreSQL implementation follows in L08.
+InMemoryHistory is used for tests and offline checks. A PostgreSQL implementation is added
+with the scoring API.
 """
 
 from __future__ import annotations
