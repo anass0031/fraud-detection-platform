@@ -18,6 +18,14 @@ eda = [
     "ipykernel>=6.29",
     "nbconvert>=7.16",
 ]
+train = [
+    "scikit-learn>=1.5",
+    "lightgbm>=4.5",
+    "matplotlib>=3.9",
+    "tabulate>=0.9",
+    "optuna>=4.0",
+    "xgboost>=2.1",
+]
 dev = [
     "pytest>=8.3",
     "ruff>=0.8",
