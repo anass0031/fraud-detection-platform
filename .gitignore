@@ -1,0 +1,75 @@
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+kaggle.json
+.kaggle/
+credentials*.json
+secrets/
+
+# --- Internal working documents (planning, progress, assistant guidance) — kept local only ---
+CLAUDE.md
+CLAUDE.local.md
+PROGRESS.md
+idea.md
+plans/
+prompt.md
+claude-code-prompt.md
+review-notes.md
+notes/
+scratch/
+scratchpad/
+
+# --- Local AI-assistant / editor settings and session artifacts ---
+.claude/
+.cursor/
+.aider*
+.vscode/
+.idea/
+*.swp
+*~
+*.bak
+*.orig
+*.tmp
+*.log
+logs/
+
+# --- Data and model artifacts ---
+# Raw IEEE-CIS data is NOT redistributed here (see README "Dataset"); generated Parquet stays local.
+data/*
+!data/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+*.joblib
+*.pkl
+*.ckpt
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
