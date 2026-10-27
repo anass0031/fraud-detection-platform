@@ -25,6 +25,7 @@ train = [
     "tabulate>=0.9",
     "optuna>=4.0",
     "xgboost>=2.1",
+    "shap>=0.47",
 ]
 dev = [
     "pytest>=8.3",

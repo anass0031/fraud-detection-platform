@@ -2,7 +2,7 @@
 
 An end-of-studies (PFA) project to build a platform that **scores payment transactions for fraud risk**, **explains each score** in plain language, and **ranks suspicious cases** for human review. It is built on the IEEE-CIS Fraud Detection dataset (real e-commerce transactions from Vesta Corporation).
 
-> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period) and the anomaly safety net are complete. The model is not served yet: the API currently exposes only a health check. See [Project status](#project-status).
+> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net and plain-language SHAP explanations are complete. The model is not served yet: the API currently exposes only a health check. See [Project status](#project-status).
 
 ---
 
@@ -17,6 +17,7 @@ An end-of-studies (PFA) project to build a platform that **scores payment transa
 - [Completed work: evaluation and baselines](#completed-work-evaluation-and-baselines)
 - [Completed work: production model and test results](#completed-work-production-model-and-test-results)
 - [Completed work: anomaly safety net](#completed-work-anomaly-safety-net)
+- [Completed work: SHAP explanations](#completed-work-shap-explanations)
 - [Key findings](#key-findings)
 - [Chronological split](#chronological-split)
 - [Leakage safeguards](#leakage-safeguards)
@@ -72,6 +73,7 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 │   │   ├── features/         # time-safe feature pipeline (batch + online), encoder        [implemented]
 │   │   ├── evaluate/         # metrics, cost model, capacity-constrained threshold        [implemented]
 │   │   ├── models/           # loader, baselines, LightGBM/XGBoost, CV folds, tuning, calibration, anomaly [implemented]
+│   │   ├── explain/          # SHAP contributions, masked-feature groups, plain-language factors [implemented]
 │   │   └── registry.py       # file-based model artifacts (model.txt + calibrator/metadata JSON) [implemented]
 │   ├── scripts/
 │   │   ├── verify_raw_data.py
@@ -83,7 +85,8 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 │   │   ├── train_final.py    # comparison, calibration, alert policy, model artifact
 │   │   ├── evaluate_test.py  # single evaluation on the test period
 │   │   ├── train_anomaly.py  # Isolation Forest safety net: fit, cut-off, validation analysis
-│   │   └── evaluate_anomaly_test.py # single test check of the safety net
+│   │   ├── evaluate_anomaly_test.py # single test check of the safety net
+│   │   └── explain_model.py  # SHAP checks, global figures, example explanations
 │   ├── notebooks/01_eda.ipynb  # exploratory data analysis                                 [implemented]
 │   └── tests/                # unit, leakage and training/serving consistency tests
 ├── docs/eda_findings.md      # one-page summary of the EDA results
@@ -140,7 +143,8 @@ Run from the repository root.
 | Test evaluation (once) | `ml/.venv/Scripts/python ml/scripts/evaluate_test.py` | `reports/test_results.{json,md}` + figures; refuses a second run (`--dry-run` checks the code on validation) |
 | Anomaly safety net | `ml/.venv/Scripts/python ml/scripts/train_anomaly.py --save` | Isolation Forest fitted on train (no labels), cut-off = top 0.5% of train; `reports/anomaly_validation.{csv,md}`, figures, artifact `artifacts/models/iforest-<date>-<n>/` (about 15 s) |
 | Safety-net test check (once) | `ml/.venv/Scripts/python ml/scripts/evaluate_anomaly_test.py` | `reports/anomaly_test_results.{json,md}`; refuses a second run (`--dry-run` checks the code on validation) |
-| ML tests | `ml/.venv/Scripts/python -m pytest ml/tests -q` | 127 tests pass (about 40 s) |
+| SHAP explanations | `ml/.venv/Scripts/python ml/scripts/explain_model.py` | additivity and `shap` cross-check, `reports/figures/shap_{importance,beeswarm}.png`, `reports/shap_examples.md` (about 30 s) |
+| ML tests | `ml/.venv/Scripts/python -m pytest ml/tests -q` | 151 tests pass (about 45 s) |
 | ML lint | `ml/.venv/Scripts/ruff check ml` | no issues |
 | Run the EDA notebook | `cd ml/notebooks && ../.venv/Scripts/jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1200 01_eda.ipynb` | runs end to end; figures written to `reports/figures/eda/` |
 | Backend tests | `docker compose exec backend pytest -q` | 2 tests pass |
@@ -229,6 +233,18 @@ An **Isolation Forest** (unsupervised, fitted on the train period without labels
 
 **Result:** the safety net adds almost nothing here. Most unusual transactions are already caught by the main model, and on test the remaining extra alerts are less precise than random review. It is kept only as a **low-priority "unusual pattern" flag** (about 3 per day, reviewed when capacity is left). A one-off burst of unusual transactions in December 2017 also makes the train-based cut-off stricter than intended, which argues for refitting it on recent traffic. Details: [`reports/anomaly_findings.md`](reports/anomaly_findings.md).
 
+## Completed work: SHAP explanations
+
+Every transaction gets its **top risk factors in plain language**, computed with LightGBM's built-in exact SHAP values (identical to the `shap` library, about 18 ms per transaction). Anonymised columns are grouped into four families and never named.
+
+> Amount $554: moderately raises risk
+> 24.5 h since this customer's previous transaction: moderately raises risk
+> Card type is credit: strongly raises risk
+
+The explanation object (top 10 factors with direction, strength and a `masked` flag) is ready to be stored with each prediction. The anonymised families drive the score most, so the case page will list readable reasons first. Factors describe what moved the model's score, not causes. Details and 10 reviewed examples: [`reports/shap_findings.md`](reports/shap_findings.md), [`reports/shap_examples.md`](reports/shap_examples.md).
+
+![SHAP importance](reports/figures/shap_importance.png)
+
 ## Key findings
 
 - **Fraud rate: about 3.50%** in the labelled data (20,663 of 590,540; 1 fraud for every 27.6 legitimate transactions), about 113 frauds per day. The weekly rate varies between 2.3% and 4.9%.
@@ -276,11 +292,12 @@ The EDA confirmed strong **label propagation**: when a pseudo customer (`uid = c
 | **Evaluation framework, baselines and imbalance handling** | ✅ done |
 | **Model selection (LightGBM/XGBoost), calibration, cost-based threshold, test evaluation** | ✅ done |
 | **Anomaly detection safety net (Isolation Forest)** | ✅ done |
-| **SHAP explanations (local factors, plain-language reasons, global figures)** | ⏭ next |
+| **SHAP explanations (local factors, plain-language reasons, global figures)** | ✅ done |
+| **Scoring API: database schema, model registry, `POST /score`, batch scoring** | ⏭ next |
 | Scoring API, authentication and roles, review queue with audit trail | planned |
 | Analyst dashboard, monitoring (drift, performance), retraining workflow | planned |
 
-**Next stage:** SHAP explanations for the production model: the top contributing factors for each transaction, plain-language risk factors (masked features grouped), and global importance figures.
+**Next stage:** the scoring API. Database schema and migrations, loading transactions, a model registry, `POST /score` (features → calibrated score → safety-net flag → explanation, stored as a prediction), and a batch scoring script.
 
 ## Limitations
 
