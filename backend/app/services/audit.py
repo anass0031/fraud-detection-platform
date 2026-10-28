@@ -4,7 +4,8 @@ Call `record(...)` in the same database transaction as the change itself, before
 so a change and its audit row are always saved (or rolled back) together.
 
 Action names: `<entity>.<verb>`, e.g. auth.login, auth.login_failed, auth.logout,
-user.create, model.register, model.activate (the review queue adds case.* and settings.*).
+user.create, model.register, model.activate, case.create (system), case.claim, case.assign,
+case.decide, settings.update.
 """
 
 from __future__ import annotations

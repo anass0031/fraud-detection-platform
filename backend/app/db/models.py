@@ -1,6 +1,7 @@
-"""Database tables: transactions, model registry, predictions, users, refresh tokens, audit log.
+"""Database tables: transactions, model registry, predictions, users, refresh tokens, audit log,
+review queue (cases, decisions) and settings.
 
-Cases, settings and monitoring tables are added with their own migrations.
+Monitoring tables are added with their own migration.
 """
 
 from __future__ import annotations
@@ -41,6 +42,9 @@ TRANSACTION_SOURCES = ("history", "batch", "realtime", "replay")
 MODEL_STATUSES = ("candidate", "active", "archived")
 RISK_LEVELS = ("low", "medium", "high", "critical")
 USER_ROLES = ("analyst", "admin")
+CASE_REASONS = ("model_score", "anomaly")
+CASE_STATUSES = ("new", "assigned", "escalated", "closed")
+DECISIONS = ("confirmed_fraud", "false_positive", "escalate")
 
 
 class Base(DeclarativeBase):
@@ -218,4 +222,78 @@ class AuditLog(Base):
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
         Index("ix_audit_logs_created_at", "created_at"),
         Index("ix_audit_logs_action", "action"),
+    )
+
+
+class Case(Base):
+    """A transaction waiting for (or after) human review. One case per transaction.
+
+    Queue order: priority_tier asc (1 = model alert, 2 = unusual pattern), then
+    priority_score desc (expected loss = calibrated probability x amount).
+    """
+
+    __tablename__ = "cases"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"), unique=True
+    )
+    prediction_id: Mapped[int] = mapped_column(ForeignKey("predictions.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(16))
+    priority_tier: Mapped[int] = mapped_column(Integer)
+    priority_score: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16), server_default="new")
+    assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    transaction: Mapped[Transaction] = relationship()
+    prediction: Mapped[Prediction] = relationship()
+    assignee: Mapped[User | None] = relationship()
+    decisions: Mapped[list[Decision]] = relationship(back_populates="case", order_by="Decision.id")
+
+    __table_args__ = (
+        Index("ix_cases_queue", "status", "priority_tier", text("priority_score DESC")),
+        CheckConstraint(f"reason IN {CASE_REASONS}", name="reason"),
+        CheckConstraint(f"status IN {CASE_STATUSES}", name="status"),
+        CheckConstraint("priority_tier IN (1, 2)", name="priority_tier"),
+    )
+
+
+class Decision(Base):
+    """An analyst's decision on a case. Several per case (escalation chain); the latest
+    confirmed_fraud / false_positive one is the final label."""
+
+    __tablename__ = "decisions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    analyst_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    decision: Mapped[str] = mapped_column(String(16))
+    comment: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    case: Mapped[Case] = relationship(back_populates="decisions")
+    analyst: Mapped[User] = relationship()
+
+    __table_args__ = (CheckConstraint(f"decision IN {DECISIONS}", name="decision"),)
+
+
+class Setting(Base):
+    """An admin-editable setting (keys: `thresholds`, `costs`). A missing key = defaults."""
+
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

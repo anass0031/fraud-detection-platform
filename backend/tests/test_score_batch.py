@@ -5,7 +5,7 @@ from fraudml.registry import MODELS_DIR
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Prediction, Transaction
+from app.db.models import Case, Prediction, Transaction
 from app.scripts.score_batch import pending_ids, score_ids
 from app.services.model_store import ModelStore, register
 from app.services.transactions_loader import load_frame
@@ -36,3 +36,7 @@ def test_batch_scores_pending_rows_once(db_session: Session):
     rows = db_session.scalars(select(Transaction).order_by(Transaction.external_id)).all()
     assert rows[0].features["uid_n_prior"] == 0.0
     assert rows[1].features["uid_n_prior"] == 1.0
+
+    # Scoring opens one case per alerted / flagged prediction, in the same transaction.
+    flagged = sum(p.is_alert or p.is_unusual for p in preds)
+    assert db_session.scalar(select(func.count()).select_from(Case)) == flagged

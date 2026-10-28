@@ -2,7 +2,7 @@
 
 An end-of-studies (PFA) project to build a platform that **scores payment transactions for fraud risk**, **explains each score** in plain language, and **ranks suspicious cases** for human review. It is built on the IEEE-CIS Fraud Detection dataset (real e-commerce transactions from Vesta Corporation).
 
-> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL) and **authentication with an append-only audit trail** are complete. The review queue and the analyst dashboard come next. See [Project status](#project-status).
+> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations, the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL), **authentication with an append-only audit trail** and the **review queue API** (cases, claim/assign, decisions, threshold and cost settings, CSV export) are complete. The analyst dashboard comes next. See [Project status](#project-status).
 
 ---
 
@@ -20,6 +20,7 @@ An end-of-studies (PFA) project to build a platform that **scores payment transa
 - [Completed work: SHAP explanations](#completed-work-shap-explanations)
 - [Completed work: scoring API](#completed-work-scoring-api)
 - [Completed work: authentication and audit trail](#completed-work-authentication-and-audit-trail)
+- [Completed work: review queue](#completed-work-review-queue)
 - [Key findings](#key-findings)
 - [Chronological split](#chronological-split)
 - [Leakage safeguards](#leakage-safeguards)
@@ -65,13 +66,13 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 ├── backend/                  # FastAPI app (installs the fraudml package; no copy of feature code)
 │   ├── alembic/              # database migrations (applied on container start)            [implemented]
 │   ├── app/
-│   │   ├── api/v1/           # health, auth (login/refresh/logout/me), users, POST /score  [implemented]
-│   │   ├── db/models.py      # transactions, model_versions, predictions                  [implemented]
+│   │   ├── api/v1/           # health, auth, users, POST /score, cases, settings, reports  [implemented]
+│   │   ├── db/models.py      # transactions, models, predictions, users, audit, cases, settings [implemented]
 │   │   ├── schemas/          # request/response models (raw IEEE-CIS field names)         [implemented]
 │   │   ├── core/security.py  # bcrypt passwords, JWT access tokens, refresh-token hashing [implemented]
-│   │   ├── services/         # history, model registry, scoring, loader, auth, users, audit [implemented]
-│   │   └── scripts/          # load_transactions, register_model, score_batch, check_skew_db [implemented]
-│   └── tests/                # API, registry, history, loader, migration tests (separate test DB)
+│   │   ├── services/         # history, registry, scoring, loader, auth, users, audit, cases, settings [implemented]
+│   │   └── scripts/          # load_transactions, register_model, score_batch, open_cases, check_skew_db, seed_users [implemented]
+│   └── tests/                # API, workflow, registry, history, loader, migration tests (separate test DB)
 ├── frontend/                 # React 19 + TypeScript + Vite + Mantine: system-status page [skeleton]
 │   └── src/
 ├── ml/                       # "fraudml" Python package (Python 3.11)
@@ -144,7 +145,7 @@ docker compose exec backend python -m app.scripts.load_transactions --until 2018
 # 2. Register and activate the model bundle, then restart the API so it loads it
 docker compose exec backend python -m app.scripts.register_model lgbm-2026.10.27-1 --anomaly iforest-2026.10.27-1 --activate
 docker compose restart backend
-# 3. Optional: load and score the first test day (3,060 rows, ~7 min)
+# 3. Optional: load and score the first test day (3,060 rows, ~7 min; scoring opens the review cases)
 docker compose exec backend python -m app.scripts.load_transactions --from 2018-04-28 --to 2018-04-29 --source batch
 docker compose exec backend python -m app.scripts.score_batch --from 2018-04-28 --to 2018-04-29
 # 4. Demo users: 1 admin + 2 analysts, passwords from .env (re-running skips existing users)
@@ -178,9 +179,12 @@ Run from the repository root.
 | Seed demo users | `docker compose exec backend python -m app.scripts.seed_users` | 3 users created (admin + 2 analysts); a re-run creates 0; refuses placeholder passwords |
 | Log in | `curl -c cookies.txt -X POST localhost:8000/api/v1/auth/login -d "username=<e-mail>&password=<password>"` | 200 with `access_token`; refresh token stored as an httpOnly cookie |
 | Score one transaction | `curl -X POST localhost:8000/api/v1/score -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" -d @txn.json` | 200 with calibrated score, expected loss, alert, risk level, unusual flag and top 10 factors |
-| Batch scoring | `docker compose exec backend python -m app.scripts.score_batch --from 2018-04-28 --to 2018-04-29` | 3,060 rows, 154 alerts; a re-run scores 0 (about 7 min) |
-| Skew check vs PostgreSQL | `docker compose exec backend python -m app.scripts.check_skew_db` | 1,000 rows: 0 feature mismatches, probability difference 0, `RESULT: PASS` (about 3 min) |
-| Backend tests | `docker compose exec backend pytest -q` | 86 tests pass (separate `fraud_test` database) |
+| Batch scoring | `docker compose exec backend python -m app.scripts.score_batch --from 2018-04-28 --to 2018-04-29` | 3,060 rows, 154 alerts; a re-run scores 0 (about 7 min); opens one review case per alert / unusual flag |
+| Open review cases (backfill) | `docker compose exec backend python -m app.scripts.open_cases --from 2018-04-28 --to 2018-04-29` | for predictions stored before the review queue existed: 156 cases (154 model alerts + 2 unusual); a re-run opens 0 |
+| Review queue | `curl -H "Authorization: Bearer <access_token>" "localhost:8000/api/v1/cases?status=new&limit=10"` | the 10 highest-priority open cases and the total |
+| Export cases | `curl -H "Authorization: Bearer <access_token>" -o cases.csv "localhost:8000/api/v1/reports/cases.csv?status=closed"` | CSV with one row per case and its final decision (no ground truth) |
+| Skew check vs PostgreSQL | `docker compose exec backend python -m app.scripts.check_skew_db` | 1,000 rows: 0 feature mismatches, probability difference 0, 0 alert mismatches, `RESULT: PASS` (about 3–5 min; uses the model's own threshold, whatever the admin settings) |
+| Backend tests | `docker compose exec backend pytest -q` | 177 tests pass (separate `fraud_test` database) |
 | Backend lint | `docker compose exec backend ruff check .` | no issues |
 | Frontend checks | `docker compose exec frontend npm run lint` / `npm run build` | no errors |
 
@@ -281,7 +285,7 @@ The explanation object (top 10 factors with direction, strength and a `masked` f
 
 ## Completed work: scoring API
 
-`POST /api/v1/score` takes one raw transaction (IEEE-CIS field names; only id, time and amount are required). It returns a calibrated fraud probability, the expected loss (probability × amount), the alert decision (expected loss ≥ $21.82), a risk level (low < 5% · medium < 20% · high < 50% · critical), the "unusual pattern" flag and the top 10 plain-language factors. The transaction and its prediction are stored in PostgreSQL.
+`POST /api/v1/score` takes one raw transaction (IEEE-CIS field names; only id, time and amount are required). It returns a calibrated fraud probability, the expected loss (probability × amount), the alert decision (expected loss ≥ $21.82 by default; an admin can change it), a risk level (low < 5% · medium < 20% · high < 50% · critical), the "unusual pattern" flag and the top 10 plain-language factors. The transaction and its prediction are stored in PostgreSQL.
 
 - **One feature pipeline:** the backend installs the `fraudml` package and calls its online feature path. Only the history lookup is new (the customer's earlier transactions, read from PostgreSQL).
 - **Model registry:** `model_versions` holds each scoring bundle (LightGBM model, calibrator, alert policy, linked Isolation Forest). Registration refuses artifacts trained with another feature encoder or other library versions. At most one bundle is active, and the API loads it at startup.
@@ -299,6 +303,21 @@ Scoring takes about 140 ms per transaction (features 66 ms, Isolation Forest 30 
 - **Two roles:** analyst and admin. `GET/POST /users` is admin only. The user is re-read on every request, so a deactivated account or a changed role takes effect immediately. `POST /score` needs any logged-in user.
 - **Demo users** come from a seed script, with passwords taken only from `.env`.
 - **Audit trail:** every state-changing action writes one row to `audit_logs` in the same transaction as the change: `auth.login`, `auth.login_failed` (with a reason, never the password), `auth.logout`, `auth.token_reuse`, `user.create`, `model.register` and `model.activate`. **PostgreSQL itself refuses UPDATE, DELETE and TRUNCATE** on this table (trigger), and a user with audit history cannot be deleted. The audit service also refuses any field that looks like a password or token.
+
+## Completed work: review queue
+
+Every alert becomes a **case** that an analyst reviews. All endpoints need a logged-in user; settings are admin only.
+
+- **Cases are opened by scoring** (API and batch, same database transaction): an alert opens a tier-1 case (reason "model score"), an "unusual pattern" flag a tier-2 case. One case per transaction. A backfill script does the same for predictions stored earlier.
+- **Queue order:** model alerts first, ranked by **expected loss** (probability × amount, the quantity the threshold was optimised on), then unusual-pattern cases. Case id breaks ties, so pages are stable. Days with more than 150 alerts are not cut: unreviewed cases stay in the queue.
+- **`GET /cases`** filters by status, risk level, reason, assignee (`me`, `unassigned` or a user), amount and transaction date, sorts by priority, amount or time, and pages results with a total. **`GET /cases/{id}`** adds the transaction facts, the score and plain-language risk factors, the customer's 10 earlier transactions (with a "had a case" flag only) and the decisions.
+- **Workflow:** `claim` (`new` → `assigned`), `assign` (admin), `decision`: *confirmed fraud* or *false positive* closes the case; *escalate* (comment required) unassigns it for an admin to claim and close. Only the assigned person can decide; closed cases cannot change. The case row is locked during a change, so two analysts cannot claim the same case.
+- **Timeline:** `GET /cases/{id}/timeline` is read from the audit trail (`case.create` by the system, `case.claim`, `case.assign`, `case.decide` with the comment).
+- **Settings (admin):** `GET/PUT /settings/thresholds` (alert threshold override, `null` = the active model's $21.82, and the risk-level bands) and `GET/PUT /settings/costs` (review cost, false-alarm cost, daily capacity). Changes are audited with before/after values and apply to transactions scored afterwards, not retroactively.
+- **CSV export:** `GET /reports/cases.csv` with the queue filters, in queue order, with the final decision and who made it. Cells that a spreadsheet would run as a formula are escaped.
+- **Ground truth is never returned** by any case, timeline or export endpoint (checked by tests).
+
+Checked on the demo database: 156 cases for the first test day (154 model alerts + 2 unusual); an analyst claims and confirms the top case ($994, expected loss $481) while a second analyst is refused (409/403); an escalated case is closed by an admin; the timeline, settings changes and CSV export each match the audit rows written.
 
 ## Key findings
 
@@ -350,15 +369,16 @@ The EDA confirmed strong **label propagation**: when a pseudo customer (`uid = c
 | **SHAP explanations (local factors, plain-language reasons, global figures)** | ✅ done |
 | **Scoring API: database schema, model registry, `POST /score`, batch scoring** | ✅ done |
 | **Authentication and roles, audit trail** | ✅ done |
-| **Review queue and case workflow** | ⏭ next |
-| Analyst dashboard, monitoring (drift, performance), retraining workflow | planned |
+| **Review queue and case workflow (API)** | ✅ done |
+| **Analyst dashboard (frontend)** | ⏭ next |
+| Monitoring (drift, performance), retraining workflow | planned |
 
-**Next stage:** the review queue. Cases created from alerts, then filters, assignment and decisions (confirm fraud / false positive / escalate), all audited.
+**Next stage:** the analyst dashboard: login, review queue table, case detail with the SHAP chart and the decision panel.
 
 ## Limitations
 
 - Activating another model requires restarting the backend. The frontend is still a skeleton.
-- No login rate limiting or account lock-out yet (failed logins are audited). Behind the Vite proxy, the audit log records the proxy's IP, not the browser's. Users cannot be edited, deactivated or have their password reset through the API yet (database only). The audit log is readable through the database (Adminer), not through an API page.
+- No login rate limiting or account lock-out yet (failed logins are audited). Behind the Vite proxy, the audit log records the proxy's IP, not the browser's. Users cannot be edited, deactivated or have their password reset through the API yet (database only). The audit log is readable through the database (Adminer) and per case through the timeline endpoint, not through a full audit page. Case comments and bulk assignment are not implemented (the decision carries a comment). A prediction does not store the threshold in force when it was made (the audit trail records each threshold change).
 - Performance drops from validation to test (PR-AUC 0.559 → 0.454) because of drift; probabilities are slightly too high on test (mean 4.2% vs 3.4% fraud rate).
 - Scoring takes about 140 ms per transaction (shared pandas feature code, chosen to guarantee consistency with training). That is fine for single calls; replaying the whole test period (~100k transactions) would take a few hours.
 - Most dataset features are anonymised, which limits how readable explanations can be.

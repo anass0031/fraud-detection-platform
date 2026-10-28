@@ -2,7 +2,7 @@
 
 raw transaction -> features (shared fraudml online path, history from PostgreSQL)
 -> LightGBM -> isotonic calibration -> expected loss + alert rule -> Isolation Forest flag
--> SHAP top factors -> `predictions` row.
+-> SHAP top factors -> `predictions` row -> review-queue case if alerted or flagged.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,25 +25,26 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Prediction, Transaction
+from app.services.cases import open_case
 from app.services.history import PostgresHistory
 from app.services.model_store import ScoringBundle
+from app.services.settings import DEFAULT_RISK_BANDS, AlertPolicy, alert_policy
 from app.services.transactions_loader import READABLE
 
-# Risk level from the calibrated probability: upper bounds (exclusive) -> level.
-# Agreed bands; they become configurable with the settings API.
-RISK_BANDS: tuple[tuple[float, str], ...] = ((0.05, "low"), (0.20, "medium"), (0.50, "high"))
-TOP_RISK_LEVEL = "critical"
+# Risk level from the calibrated probability: three upper bounds (exclusive) -> four levels.
+# The bounds come from the `thresholds` setting (defaults 5% / 20% / 50%).
+RISK_LEVELS = ("low", "medium", "high", "critical")
 
 
 class TransactionConflict(ValueError):
     """The TransactionID is already stored with different data."""
 
 
-def risk_level(probability: float) -> str:
-    for bound, level in RISK_BANDS:
+def risk_level(probability: float, bands: Sequence[float] = DEFAULT_RISK_BANDS) -> str:
+    for bound, level in zip(bands, RISK_LEVELS, strict=False):
         if probability < bound:
             return level
-    return TOP_RISK_LEVEL
+    return RISK_LEVELS[-1]
 
 
 def _json_value(v: Any) -> Any:
@@ -101,20 +103,26 @@ class Scored:
     latency_ms: float
 
 
-def compute_score(db: Session, bundle: ScoringBundle, raw: dict[str, Any]) -> Scored:
+def compute_score(
+    db: Session, bundle: ScoringBundle, raw: dict[str, Any], policy: AlertPolicy | None = None
+) -> Scored:
     """Features (history from PostgreSQL) -> calibrated score -> policy -> anomaly -> SHAP.
 
+    `policy` defaults to the effective one (admin settings, else the model's threshold).
     Read-only: the transaction itself must not be in its own history (strictly earlier rows
     only, so a stored transaction is excluded automatically).
     """
     t0 = time.perf_counter()
     X = compute_features_online_frame(raw, PostgresHistory(db), bundle.encoder)
     model = bundle.model
+    if policy is None:
+        policy = alert_policy(db, model.metadata["threshold"])
     Xm = X[model.features]
     amount = float(raw["TransactionAmt"])
     prob = float(model.predict_proba(Xm)[0])
     exp_loss = float(expected_loss(prob, amount))
-    is_alert = bool(model.is_alert(prob, amount))
+    # Same rule as the model's own is_alert, with the effective threshold.
+    is_alert = bool(model.alert_score(prob, amount) >= policy.threshold)
 
     anomaly_score, is_unusual = None, False
     if bundle.anomaly is not None:
@@ -130,14 +138,18 @@ def compute_score(db: Session, bundle: ScoringBundle, raw: dict[str, Any]) -> Sc
         is_alert=is_alert,
         anomaly_score=anomaly_score,
         is_unusual=bool(is_unusual),
-        risk_level=risk_level(prob),
+        risk_level=risk_level(prob, policy.risk_bands),
         explanation=explanation,
         latency_ms=(time.perf_counter() - t0) * 1000,
     )
 
 
 def score_stored(db: Session, bundle: ScoringBundle, txn: Transaction) -> Prediction:
-    """Score a stored transaction with the bundle and add the prediction to the session."""
+    """Score a stored transaction with the bundle and add the prediction to the session.
+
+    Opens a review-queue case (same DB transaction) if the prediction is an alert or an
+    "unusual pattern" flag.
+    """
     s = compute_score(db, bundle, txn.raw)
     txn.features = features_to_json(s.features)
     pred = Prediction(
@@ -156,6 +168,7 @@ def score_stored(db: Session, bundle: ScoringBundle, txn: Transaction) -> Predic
     )
     db.add(pred)
     db.flush()
+    open_case(db, pred)
     return pred
 
 

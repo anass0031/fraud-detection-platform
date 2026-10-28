@@ -30,6 +30,7 @@ from app.db.models import Transaction
 from app.db.session import SessionLocal
 from app.services.model_store import ModelStore
 from app.services.scoring import compute_score
+from app.services.settings import model_policy
 
 PROB_TOL = 1e-9
 
@@ -96,9 +97,11 @@ def main() -> None:
         max_feat, max_prob = 0.0, 0.0
         alert_mm = unusual_mm = 0
         t0 = time.perf_counter()
+        # The model's own policy: this checks the model, whatever the admin settings are.
+        policy = model_policy(bundle.model.metadata["threshold"])
         for period, ext_id in sample:
             txn = by_id[ext_id]
-            s = compute_score(db, bundle, txn.raw)
+            s = compute_score(db, bundle, txn.raw, policy)
             batch = offline[period].loc[ext_id]
             online = s.features.iloc[0]
             for f in FEATURES_CURATED:

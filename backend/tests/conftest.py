@@ -3,6 +3,8 @@
 Tests never touch the demo database. The test database is dropped and re-created once per run.
 """
 
+import datetime as dt
+import itertools
 import os
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -19,7 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.db.models import User
+from app.db.models import ModelVersion, Prediction, Transaction, User
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_DB_NAME = "fraud_test"
@@ -113,3 +115,73 @@ def auth_header(client, user: User) -> dict[str, str]:
     resp = login(client, user.email)
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest.fixture
+def make_prediction(db_session: Session) -> Callable[..., Prediction]:
+    """A stored transaction + prediction without model artifacts (for queue tests).
+
+    make_prediction(amount=100.0, score=0.3, alert=True, unusual=False, when=datetime,
+    customer="c1", ground_truth=None, product="W", risk="high") -> Prediction.
+    """
+    ids = itertools.count(1_000_000)
+    model: list[ModelVersion] = []
+
+    def _model() -> ModelVersion:
+        if not model:
+            mv = ModelVersion(
+                version="test-model",
+                algorithm="lightgbm",
+                artifact_path="unused",
+                feature_list=["x"],
+                policy="expected_loss",
+                threshold=20.0,
+                status="active",
+            )
+            db_session.add(mv)
+            db_session.flush()
+            model.append(mv)
+        return model[0]
+
+    def _make(
+        amount: float = 100.0,
+        score: float = 0.3,
+        alert: bool = True,
+        unusual: bool = False,
+        when: dt.datetime = dt.datetime(2018, 4, 28, 12, 0),
+        customer: str | None = "c1",
+        ground_truth: bool | None = None,
+        product: str = "W",
+        risk: str = "high",
+    ) -> Prediction:
+        ext = next(ids)
+        txn = Transaction(
+            external_id=ext,
+            transaction_dt=int((when - dt.datetime(2017, 12, 1)).total_seconds()),
+            transaction_time=when,
+            amount=amount,
+            product_code=product,
+            customer_key=customer,
+            raw={"TransactionID": ext, "TransactionAmt": amount},
+            ground_truth=ground_truth,
+            source="batch",
+        )
+        db_session.add(txn)
+        db_session.flush()
+        pred = Prediction(
+            transaction_id=txn.id,
+            model_version_id=_model().id,
+            fraud_score=score,
+            expected_loss=score * amount,
+            is_alert=alert,
+            anomaly_score=0.7 if unusual else 0.1,
+            is_unusual=unusual,
+            risk_level=risk,
+            shap_values={"base_value": 0.03, "factors": []},
+            base_value=0.03,
+        )
+        db_session.add(pred)
+        db_session.flush()
+        return pred
+
+    return _make

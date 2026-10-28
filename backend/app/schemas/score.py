@@ -84,7 +84,7 @@ class ScoreResponse(BaseModel):
     expected_loss: float = Field(description="fraud_score x amount, in USD")
     is_alert: bool
     alert_policy: str
-    alert_threshold: float
+    alert_threshold: float = Field(description="Threshold in force (admin setting or model's)")
     risk_level: Literal["low", "medium", "high", "critical"]
     is_unusual: bool = Field(description="Unusual-pattern flag (anomaly safety net, no alert)")
     anomaly_score: float | None

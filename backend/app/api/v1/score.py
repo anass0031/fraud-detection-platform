@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.schemas.score import RiskFactor, ScoreResponse, TransactionIn
 from app.services.model_store import ModelStore, get_model_store
 from app.services.scoring import TransactionConflict, score_raw
+from app.services.settings import alert_policy
 
 router = APIRouter(tags=["scoring"])
 
@@ -50,7 +51,7 @@ def score(
         expected_loss=p.expected_loss,
         is_alert=p.is_alert,
         alert_policy=meta["policy"],
-        alert_threshold=float(meta["threshold"]),
+        alert_threshold=alert_policy(db, meta["threshold"]).threshold,
         risk_level=p.risk_level,
         is_unusual=p.is_unusual,
         anomaly_score=p.anomaly_score,
