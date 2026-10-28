@@ -71,7 +71,11 @@ class PredictionOut(BaseModel):
     is_alert: bool
     is_unusual: bool
     anomaly_score: float | None
-    base_value: float | None
+    base_value: float | None = Field(description="Model average, log-odds (waterfall start)")
+    raw_log_odds: float | None = Field(description="Model raw score, log-odds (waterfall end)")
+    other_contribution: float | None = Field(
+        description="Sum of the contributions outside the top factors, log-odds"
+    )
     top_factors: list[RiskFactor]
     scored_at: dt.datetime
 

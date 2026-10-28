@@ -126,6 +126,10 @@ def test_detail(api, db_session, headers, make_prediction, queue):
     assert body["prediction"]["model_version"] == "test-model"
     assert body["prediction"]["fraud_score"] == pytest.approx(0.4)
     assert body["prediction"]["top_factors"] == []
+    # Waterfall: base -> factors -> other -> raw score.
+    assert body["prediction"]["base_value"] == -3.0
+    assert body["prediction"]["raw_log_odds"] == -1.0
+    assert body["prediction"]["other_contribution"] == 0.5
     assert [(h["amount"], h["had_case"]) for h in body["card_history"]] == [
         (7.0, False),
         (5.0, True),

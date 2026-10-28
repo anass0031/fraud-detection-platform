@@ -168,6 +168,8 @@ def get_case(case_id: int, _user: CurrentUser, db: Db) -> CaseDetail:
             is_unusual=p.is_unusual,
             anomaly_score=p.anomaly_score,
             base_value=p.base_value,
+            raw_log_odds=p.shap_values.get("raw_log_odds"),
+            other_contribution=p.shap_values.get("other_contribution"),
             top_factors=[RiskFactor(**f) for f in p.shap_values.get("factors", [])],
             scored_at=p.created_at,
         ),

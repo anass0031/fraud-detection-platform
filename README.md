@@ -2,7 +2,7 @@
 
 An end-of-studies (PFA) project to build a platform that **scores payment transactions for fraud risk**, **explains each score** in plain language, and **ranks suspicious cases** for human review. It is built on the IEEE-CIS Fraud Detection dataset (real e-commerce transactions from Vesta Corporation).
 
-> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations, the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL), **authentication with an append-only audit trail** and the **review queue API** (cases, claim/assign, decisions, threshold and cost settings, CSV export) are complete. The analyst dashboard comes next. See [Project status](#project-status).
+> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations, the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL), **authentication with an append-only audit trail** the **review queue API** (cases, claim/assign, decisions, threshold and cost settings, CSV export) and the **analyst dashboard** (login, review queue, case detail with a SHAP waterfall, decisions and timeline) are complete. Monitoring comes next. See [Project status](#project-status).
 
 ---
 
@@ -21,6 +21,7 @@ An end-of-studies (PFA) project to build a platform that **scores payment transa
 - [Completed work: scoring API](#completed-work-scoring-api)
 - [Completed work: authentication and audit trail](#completed-work-authentication-and-audit-trail)
 - [Completed work: review queue](#completed-work-review-queue)
+- [Completed work: analyst dashboard](#completed-work-analyst-dashboard)
 - [Key findings](#key-findings)
 - [Chronological split](#chronological-split)
 - [Leakage safeguards](#leakage-safeguards)
@@ -73,8 +74,12 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 │   │   ├── services/         # history, registry, scoring, loader, auth, users, audit, cases, settings [implemented]
 │   │   └── scripts/          # load_transactions, register_model, score_batch, open_cases, check_skew_db, seed_users [implemented]
 │   └── tests/                # API, workflow, registry, history, loader, migration tests (separate test DB)
-├── frontend/                 # React 19 + TypeScript + Vite + Mantine: system-status page [skeleton]
+├── frontend/                 # React 19 + TypeScript + Vite + Mantine: analyst dashboard    [implemented]
 │   └── src/
+│       ├── api/              # generated API types (schema.d.ts), typed client, token refresh
+│       ├── features/         # auth (login, guards, permissions), queue, case (detail, SHAP, decisions)
+│       ├── layouts/ routes/  # app shell, routes (pages loaded on demand), 403/404/error pages
+│       └── test/             # Vitest setup, render helpers, fixtures
 ├── ml/                       # "fraudml" Python package (Python 3.11)
 │   ├── fraudml/
 │   │   ├── config.py         # paths, dataset constants, split dates                      [implemented]
@@ -131,7 +136,7 @@ docker compose up -d --build
 
 | Service | URL |
 |---|---|
-| Frontend (system status page) | http://localhost:5173 |
+| Analyst dashboard (log in with a seeded user) | http://localhost:5173 |
 | API docs (Swagger) | http://localhost:8000/docs |
 | Health check | http://localhost:8000/api/v1/health |
 | Adminer (database browser) | http://localhost:8080 |
@@ -186,7 +191,9 @@ Run from the repository root.
 | Skew check vs PostgreSQL | `docker compose exec backend python -m app.scripts.check_skew_db` | 1,000 rows: 0 feature mismatches, probability difference 0, 0 alert mismatches, `RESULT: PASS` (about 3–5 min; uses the model's own threshold, whatever the admin settings) |
 | Backend tests | `docker compose exec backend pytest -q` | 177 tests pass (separate `fraud_test` database) |
 | Backend lint | `docker compose exec backend ruff check .` | no issues |
-| Frontend checks | `docker compose exec frontend npm run lint` / `npm run build` | no errors |
+| Frontend checks | `docker compose exec frontend npm run lint` / `npm run format:check` / `npm run build` | no errors (the build also type-checks against the generated API types) |
+| Frontend tests | `docker compose exec frontend npm test` | 87 Vitest tests pass |
+| Regenerate API types | `docker compose exec frontend npm run gen:api` | rewrites `frontend/src/api/schema.d.ts` from the running backend; no diff when the API is unchanged |
 
 To open the notebook interactively: `ml/.venv/Scripts/jupyter lab`. You can also register the environment as a kernel with `ml/.venv/Scripts/python -m ipykernel install --user --name fraudml`.
 
@@ -319,6 +326,19 @@ Every alert becomes a **case** that an analyst reviews. All endpoints need a log
 
 Checked on the demo database: 156 cases for the first test day (154 model alerts + 2 unusual); an analyst claims and confirms the top case ($994, expected loss $481) while a second analyst is refused (409/403); an escalated case is closed by an admin; the timeline, settings changes and CSV export each match the audit rows written.
 
+## Completed work: analyst dashboard
+
+A React + TypeScript web app (Mantine UI, TanStack Query and Table) on top of the API. Analysts and admins log in with a seeded account.
+
+- **Login and session:** the short-lived access token is kept in memory only (never in browser storage); the refresh token is an httpOnly cookie. A page reload restores the session with **one** refresh request, and requests that fail with 401 share a single refresh before retrying (the backend treats a refresh token used twice as stolen). Pages need a logged-in user; admin-only pages show a 403 page to analysts.
+- **Review queue:** tabs *Open* / *My cases* / *All*; filters (risk level, reason, amount, transaction date, status); sortable columns (expected loss, amount, time, age) and pages, all done by the API and **kept in the address bar** (reload, back button and shared links keep the view); *Claim*, and *Assign* for admins.
+- **Case detail:** score gauge (probability as a whole percent), risk level, expected loss, "unusual pattern" note, transaction facts, the customer's earlier transactions, and a **SHAP waterfall**: bars start at a typical transaction, each factor pushes the risk up (red) or down (green), and the last bar lands on this case's score. The plain-language reasons are listed next to it, readable ones first, anonymised signals after.
+- **Decisions:** only the analyst holding the case can decide; closing a case asks for confirmation; escalating needs a comment and hands the case to the admins. The **timeline** turns the audit trail into sentences ("Escalated to the admins", "Decision: false positive", with comments).
+- **Typed against the API:** TypeScript types are generated from the backend's OpenAPI description, so a backend change that breaks the UI fails the build (this caught a mismatch on the first build).
+- **Ground truth is never shown:** the API never returns it, and the built app contains no reference to it.
+
+Checks: 87 Vitest tests (token refresh, page guards, URL ↔ filters, the waterfall data and its drawn SVG, decision rules, timeline sentences). On the demo data every one of the 156 explanations adds up exactly.
+
 ## Key findings
 
 - **Fraud rate: about 3.50%** in the labelled data (20,663 of 590,540; 1 fraud for every 27.6 legitimate transactions), about 113 frauds per day. The weekly rate varies between 2.3% and 4.9%.
@@ -370,14 +390,15 @@ The EDA confirmed strong **label propagation**: when a pseudo customer (`uid = c
 | **Scoring API: database schema, model registry, `POST /score`, batch scoring** | ✅ done |
 | **Authentication and roles, audit trail** | ✅ done |
 | **Review queue and case workflow (API)** | ✅ done |
-| **Analyst dashboard (frontend)** | ⏭ next |
-| Monitoring (drift, performance), retraining workflow | planned |
+| **Analyst dashboard (frontend)** | ✅ done |
+| **Monitoring (day-by-day replay, drift, performance, dashboard page)** | ⏭ next |
+| Admin pages (models, threshold and costs), retraining workflow | planned |
 
-**Next stage:** the analyst dashboard: login, review queue table, case detail with the SHAP chart and the decision panel.
+**Next stage:** monitoring: replay the test period day by day, measure drift (PSI/KS) and performance, and show them on a dashboard page.
 
 ## Limitations
 
-- Activating another model requires restarting the backend. The frontend is still a skeleton.
+- Activating another model requires restarting the backend. The admin pages (threshold and costs, models) are placeholders until the admin step; the CSV export has an API endpoint but no button yet.
 - No login rate limiting or account lock-out yet (failed logins are audited). Behind the Vite proxy, the audit log records the proxy's IP, not the browser's. Users cannot be edited, deactivated or have their password reset through the API yet (database only). The audit log is readable through the database (Adminer) and per case through the timeline endpoint, not through a full audit page. Case comments and bulk assignment are not implemented (the decision carries a comment). A prediction does not store the threshold in force when it was made (the audit trail records each threshold change).
 - Performance drops from validation to test (PR-AUC 0.559 → 0.454) because of drift; probabilities are slightly too high on test (mean 4.2% vs 3.4% fraud rate).
 - Scoring takes about 140 ms per transaction (shared pandas feature code, chosen to guarantee consistency with training). That is fine for single calls; replaying the whole test period (~100k transactions) would take a few hours.

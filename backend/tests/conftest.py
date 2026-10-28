@@ -177,8 +177,13 @@ def make_prediction(db_session: Session) -> Callable[..., Prediction]:
             anomaly_score=0.7 if unusual else 0.1,
             is_unusual=unusual,
             risk_level=risk,
-            shap_values={"base_value": 0.03, "factors": []},
-            base_value=0.03,
+            shap_values={
+                "base_value": -3.0,
+                "raw_log_odds": -1.0,
+                "other_contribution": 0.5,
+                "factors": [],
+            },
+            base_value=-3.0,
         )
         db_session.add(pred)
         db_session.flush()
