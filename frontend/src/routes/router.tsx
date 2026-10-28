@@ -5,7 +5,6 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { AppLayout } from '../layouts/AppLayout'
 import { ForbiddenPage, NotFoundPage, RouteErrorPage } from './ErrorPages'
 import { RequireAuth, RequireRole } from './guards'
-import { Placeholder } from './Placeholder'
 
 /** All routes. Everything except the login page needs a logged-in user. */
 export const routes: RouteObject[] = [
@@ -46,7 +45,20 @@ export const routes: RouteObject[] = [
       {
         path: 'admin',
         element: <RequireRole roles={['admin']} />,
-        children: [{ path: 'settings', element: <Placeholder title="Threshold and costs" /> }],
+        children: [
+          {
+            path: 'settings',
+            lazy: async () => ({
+              Component: (await import('../features/admin/SettingsPage')).SettingsPage,
+            }),
+          },
+          {
+            path: 'models',
+            lazy: async () => ({
+              Component: (await import('../features/admin/ModelsPage')).ModelsPage,
+            }),
+          },
+        ],
       },
       { path: '403', element: <ForbiddenPage /> },
       { path: '*', element: <NotFoundPage /> },

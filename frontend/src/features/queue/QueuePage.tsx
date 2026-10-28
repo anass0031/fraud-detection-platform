@@ -12,11 +12,14 @@ import {
   Text,
   Title,
 } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 
 import { errorMessage } from '../../api/client'
 import { useAuth } from '../auth/context'
 import { useCases } from './api'
+import { downloadCasesCsv } from './exportCsv'
 import { FilterBar } from './FilterBar'
 import { QueueTable } from './QueueTable'
 import {
@@ -47,7 +50,20 @@ export function QueuePage() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const view = parseView(params)
-  const cases = useCases(viewToQuery(view, user!))
+  const query = viewToQuery(view, user!)
+  const cases = useCases(query)
+  const [exporting, setExporting] = useState(false)
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      const name = await downloadCasesCsv(query)
+      notifications.show({ color: 'green', message: `Downloaded ${name}` })
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Export failed', message: errorMessage(err) })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const setView = (next: QueueView) => setParams(viewToParams(next))
   const change = (c: Partial<QueueView>) => setView(updateView(view, c))
@@ -65,11 +81,22 @@ export function QueuePage() {
             {TAB_HELP[view.tab]}
           </Text>
         </div>
-        {cases.data && (
-          <Text size="sm" c="dimmed">
-            {total.toLocaleString('en-US')} {total === 1 ? 'case' : 'cases'}
-          </Text>
-        )}
+        <Group gap="sm">
+          {cases.data && (
+            <Text size="sm" c="dimmed">
+              {total.toLocaleString('en-US')} {total === 1 ? 'case' : 'cases'}
+            </Text>
+          )}
+          <Button
+            size="xs"
+            variant="default"
+            loading={exporting}
+            disabled={!cases.data || total === 0}
+            onClick={() => void exportCsv()}
+          >
+            Export CSV
+          </Button>
+        </Group>
       </Group>
 
       <Tabs

@@ -421,10 +421,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Models
+         * @description All versions: active first, then candidates, then archived (newest first).
+         */
+        get: operations["list_models_api_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Model */
+        get: operations["get_model_api_v1_models__model_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/{model_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate
+         * @description Promote a version: the previous active model is archived, an admin threshold override
+         *     is reset to the new model's own threshold, and the API scores with it immediately (no
+         *     restart). Audited. Fails with 409 (and changes nothing) if the artifacts cannot be loaded.
+         */
+        post: operations["activate_api_v1_models__model_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/models/{model_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive
+         * @description Retire a candidate (audited). The active model cannot be archived (409).
+         */
+        post: operations["archive_api_v1_models__model_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivateResponse */
+        ActivateResponse: {
+            model: components["schemas"]["ModelOut"];
+            /**
+             * Threshold Override Reset
+             * @description An admin threshold override existed and was reset to the model's own value
+             */
+            threshold_override_reset: boolean;
+        };
         /** AlertDay */
         AlertDay: {
             /**
@@ -837,6 +925,61 @@ export interface components {
             product_code: string | null;
             /** Had Case */
             had_case: boolean;
+        };
+        /** ModelOut */
+        ModelOut: {
+            /** Id */
+            id: number;
+            /** Version */
+            version: string;
+            /** Algorithm */
+            algorithm: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "candidate" | "active" | "archived";
+            /** Anomaly Version */
+            anomaly_version: string | null;
+            /** Policy */
+            policy: string;
+            /**
+             * Threshold
+             * @description The model's own alert threshold
+             */
+            threshold: number;
+            /** Calibration Method */
+            calibration_method: string | null;
+            /** Trained At */
+            trained_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Training Data Window */
+            training_data_window: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Metrics
+             * @description validation metrics, anomaly validation, and (candidates from the retrain script) the champion vs challenger comparison
+             */
+            metrics: {
+                [key: string]: unknown;
+            } | null;
+            /** Hyperparams */
+            hyperparams: {
+                [key: string]: unknown;
+            } | null;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Serving
+             * @description This version is the one the API is scoring with
+             * @default false
+             */
+            serving: boolean;
         };
         /** ModelStatus */
         ModelStatus: {
@@ -2095,6 +2238,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+        };
+    };
+    list_models_api_v1_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOut"][];
+                };
+            };
+        };
+    };
+    get_model_api_v1_models__model_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_api_v1_models__model_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_api_v1_models__model_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

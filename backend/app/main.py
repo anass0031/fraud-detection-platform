@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.v1 import auth, cases, health, monitoring, reports, score, users
+from app.api.v1 import auth, cases, health, models, monitoring, reports, score, users
 from app.api.v1 import settings as settings_routes
 from app.core.config import get_settings
 from app.db.session import SessionLocal
@@ -39,3 +39,4 @@ app.include_router(cases.router, prefix=settings.api_v1_prefix)
 app.include_router(settings_routes.router, prefix=settings.api_v1_prefix)
 app.include_router(reports.router, prefix=settings.api_v1_prefix)
 app.include_router(monitoring.router, prefix=settings.api_v1_prefix)
+app.include_router(models.router, prefix=settings.api_v1_prefix)

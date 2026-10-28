@@ -15,6 +15,7 @@ from pathlib import Path
 
 import lightgbm as lgb
 import sklearn
+from fastapi import Request
 from fraudml import config
 from fraudml.features.encoder import FeatureEncoder
 from fraudml.registry import (
@@ -115,6 +116,8 @@ def register(
         metrics={
             "validation": meta.get("validation_metrics"),
             "anomaly_validation": anomaly.metadata.get("validation_metrics") if anomaly else None,
+            # Champion vs challenger on a recent untouched week (written by the retrain script).
+            "comparison": meta.get("comparison"),
         },
         calibration_method=meta.get("calibration_method"),
         policy=meta["policy"],
@@ -148,7 +151,9 @@ def register(
     return row
 
 
-def activate_version(db: Session, version: str, actor: User | None = None) -> ModelVersion:
+def activate_version(
+    db: Session, version: str, actor: User | None = None, request: Request | None = None
+) -> ModelVersion:
     """Make `version` the only active bundle (the previous active one is archived)."""
     row = db.scalar(select(ModelVersion).where(ModelVersion.version == version))
     if row is None:
@@ -174,6 +179,30 @@ def activate_version(db: Session, version: str, actor: User | None = None) -> Mo
             "version": row.version,
             "previous_archived": before["previous_active"],
         },
+        request=request,
+    )
+    return row
+
+
+def archive_version(
+    db: Session, row: ModelVersion, actor: User, request: Request | None = None
+) -> ModelVersion:
+    """Candidate -> archived (audited). The active model cannot be archived: activate another."""
+    if row.status == "active":
+        raise RegistryError("The active model cannot be archived; activate another one first")
+    if row.status == "archived":
+        return row
+    row.status = "archived"
+    db.flush()
+    audit.record(
+        db,
+        "model.archive",
+        actor=actor,
+        entity_type="model_version",
+        entity_id=row.id,
+        before={"status": "candidate"},
+        after={"status": "archived", "version": row.version},
+        request=request,
     )
     return row
 
@@ -192,6 +221,20 @@ class ModelStore:
         self.error: str | None = "not loaded yet"
         self._lock = threading.Lock()
 
+    def prepare(self, row: ModelVersion) -> ScoringBundle:
+        """Load a version's artifacts without touching the bundle being served.
+        Raises RegistryError / OSError if the artifacts are missing or incompatible."""
+        model, anomaly, encoder = load_artifacts(
+            row.version, row.anomaly_version, self.root, self.encoder_path
+        )
+        return ScoringBundle(row.id, row.version, model, anomaly, encoder)
+
+    def swap(self, bundle: ScoringBundle) -> None:
+        """Serve `bundle` from now on (a single reference assignment: requests use either
+        the old or the new bundle, never a mix)."""
+        with self._lock:
+            self.bundle, self.error = bundle, None
+
     def load_active(self, db: Session) -> ScoringBundle | None:
         """(Re)load the active bundle. On failure keep the error and no bundle."""
         with self._lock:
@@ -203,8 +246,8 @@ class ModelStore:
                 model, anomaly, encoder = load_artifacts(
                     row.version, row.anomaly_version, self.root, self.encoder_path
                 )
-            except (RegistryError, OSError) as exc:
-                self.bundle, self.error = None, str(exc)
+            except Exception as exc:  # any loader error: the API starts without a model
+                self.bundle, self.error = None, f"{type(exc).__name__}: {exc}"
                 return None
             self.bundle = ScoringBundle(row.id, row.version, model, anomaly, encoder)
             self.error = None

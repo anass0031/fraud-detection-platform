@@ -29,6 +29,12 @@ const NAV: NavItem[] = [
     match: (path) => path === '/monitoring',
   },
   {
+    label: 'Models',
+    to: '/admin/models',
+    adminOnly: true,
+    match: (path) => path === '/admin/models',
+  },
+  {
     label: 'Threshold and costs',
     to: '/admin/settings',
     adminOnly: true,
