@@ -1,0 +1,10 @@
+# Only pyproject.toml and fraudml/ are copied into the backend image.
+.venv/
+notebooks/
+scripts/
+tests/
+*.egg-info/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.ruff_cache/

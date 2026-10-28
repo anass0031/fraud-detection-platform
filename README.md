@@ -2,7 +2,7 @@
 
 An end-of-studies (PFA) project to build a platform that **scores payment transactions for fraud risk**, **explains each score** in plain language, and **ranks suspicious cases** for human review. It is built on the IEEE-CIS Fraud Detection dataset (real e-commerce transactions from Vesta Corporation).
 
-> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net and plain-language SHAP explanations are complete. The model is not served yet: the API currently exposes only a health check. See [Project status](#project-status).
+> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL) and **authentication with an append-only audit trail** are complete. The review queue and the analyst dashboard come next. See [Project status](#project-status).
 
 ---
 
@@ -18,6 +18,8 @@ An end-of-studies (PFA) project to build a platform that **scores payment transa
 - [Completed work: production model and test results](#completed-work-production-model-and-test-results)
 - [Completed work: anomaly safety net](#completed-work-anomaly-safety-net)
 - [Completed work: SHAP explanations](#completed-work-shap-explanations)
+- [Completed work: scoring API](#completed-work-scoring-api)
+- [Completed work: authentication and audit trail](#completed-work-authentication-and-audit-trail)
 - [Key findings](#key-findings)
 - [Chronological split](#chronological-split)
 - [Leakage safeguards](#leakage-safeguards)
@@ -60,9 +62,16 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 .
 ├── docker-compose.yml        # PostgreSQL 16, FastAPI backend, React frontend, Adminer   [implemented]
 ├── .env.example              # environment template (copy to .env)                        [implemented]
-├── backend/                  # FastAPI app: settings, DB session, GET /api/v1/health      [skeleton]
+├── backend/                  # FastAPI app (installs the fraudml package; no copy of feature code)
+│   ├── alembic/              # database migrations (applied on container start)            [implemented]
 │   ├── app/
-│   └── tests/
+│   │   ├── api/v1/           # health, auth (login/refresh/logout/me), users, POST /score  [implemented]
+│   │   ├── db/models.py      # transactions, model_versions, predictions                  [implemented]
+│   │   ├── schemas/          # request/response models (raw IEEE-CIS field names)         [implemented]
+│   │   ├── core/security.py  # bcrypt passwords, JWT access tokens, refresh-token hashing [implemented]
+│   │   ├── services/         # history, model registry, scoring, loader, auth, users, audit [implemented]
+│   │   └── scripts/          # load_transactions, register_model, score_batch, check_skew_db [implemented]
+│   └── tests/                # API, registry, history, loader, migration tests (separate test DB)
 ├── frontend/                 # React 19 + TypeScript + Vite + Mantine: system-status page [skeleton]
 │   └── src/
 ├── ml/                       # "fraudml" Python package (Python 3.11)
@@ -115,7 +124,7 @@ Main dependencies (from `ml/pyproject.toml`): pandas, pyarrow, numpy, scipy; ext
 
 ### Application stack (Docker)
 ```bash
-cp .env.example .env            # then set a local password in .env
+cp .env.example .env            # then set POSTGRES_PASSWORD, JWT_SECRET and the SEED_* passwords
 docker compose up -d --build
 ```
 
@@ -126,6 +135,23 @@ docker compose up -d --build
 | Health check | http://localhost:8000/api/v1/health |
 | Adminer (database browser) | http://localhost:8080 |
 | PostgreSQL from the host | `localhost:5433` |
+
+Database migrations run automatically when the backend starts. To serve the model (after the ML steps produced `data/processed/` and `artifacts/`), run once inside the backend container:
+
+```bash
+# 1. Customer history: every labelled transaction before the test period (490,555 rows, ~30 s)
+docker compose exec backend python -m app.scripts.load_transactions --until 2018-04-28 --source history
+# 2. Register and activate the model bundle, then restart the API so it loads it
+docker compose exec backend python -m app.scripts.register_model lgbm-2026.10.27-1 --anomaly iforest-2026.10.27-1 --activate
+docker compose restart backend
+# 3. Optional: load and score the first test day (3,060 rows, ~7 min)
+docker compose exec backend python -m app.scripts.load_transactions --from 2018-04-28 --to 2018-04-29 --source batch
+docker compose exec backend python -m app.scripts.score_batch --from 2018-04-28 --to 2018-04-29
+# 4. Demo users: 1 admin + 2 analysts, passwords from .env (re-running skips existing users)
+docker compose exec backend python -m app.scripts.seed_users
+```
+
+Every endpoint except the health check and login needs a logged-in user. In Swagger (http://localhost:8000/docs), click **Authorize** and log in with an e-mail and password.
 
 ## Usage: verified commands
 
@@ -144,10 +170,18 @@ Run from the repository root.
 | Anomaly safety net | `ml/.venv/Scripts/python ml/scripts/train_anomaly.py --save` | Isolation Forest fitted on train (no labels), cut-off = top 0.5% of train; `reports/anomaly_validation.{csv,md}`, figures, artifact `artifacts/models/iforest-<date>-<n>/` (about 15 s) |
 | Safety-net test check (once) | `ml/.venv/Scripts/python ml/scripts/evaluate_anomaly_test.py` | `reports/anomaly_test_results.{json,md}`; refuses a second run (`--dry-run` checks the code on validation) |
 | SHAP explanations | `ml/.venv/Scripts/python ml/scripts/explain_model.py` | additivity and `shap` cross-check, `reports/figures/shap_{importance,beeswarm}.png`, `reports/shap_examples.md` (about 30 s) |
-| ML tests | `ml/.venv/Scripts/python -m pytest ml/tests -q` | 151 tests pass (about 45 s) |
+| ML tests | `ml/.venv/Scripts/python -m pytest ml/tests -q` | 152 tests pass (about 45 s) |
 | ML lint | `ml/.venv/Scripts/ruff check ml` | no issues |
 | Run the EDA notebook | `cd ml/notebooks && ../.venv/Scripts/jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1200 01_eda.ipynb` | runs end to end; figures written to `reports/figures/eda/` |
-| Backend tests | `docker compose exec backend pytest -q` | 2 tests pass |
+| Load transactions | `docker compose exec backend python -m app.scripts.load_transactions --until 2018-04-28 --source history` | `inserted 490,555 new rows`; a re-run inserts 0 (about 30 s) |
+| Register the model | `docker compose exec backend python -m app.scripts.register_model lgbm-2026.10.27-1 --anomaly iforest-2026.10.27-1 --activate` | one `active` row in `model_versions`; after a restart `/api/v1/health` shows both versions |
+| Seed demo users | `docker compose exec backend python -m app.scripts.seed_users` | 3 users created (admin + 2 analysts); a re-run creates 0; refuses placeholder passwords |
+| Log in | `curl -c cookies.txt -X POST localhost:8000/api/v1/auth/login -d "username=<e-mail>&password=<password>"` | 200 with `access_token`; refresh token stored as an httpOnly cookie |
+| Score one transaction | `curl -X POST localhost:8000/api/v1/score -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" -d @txn.json` | 200 with calibrated score, expected loss, alert, risk level, unusual flag and top 10 factors |
+| Batch scoring | `docker compose exec backend python -m app.scripts.score_batch --from 2018-04-28 --to 2018-04-29` | 3,060 rows, 154 alerts; a re-run scores 0 (about 7 min) |
+| Skew check vs PostgreSQL | `docker compose exec backend python -m app.scripts.check_skew_db` | 1,000 rows: 0 feature mismatches, probability difference 0, `RESULT: PASS` (about 3 min) |
+| Backend tests | `docker compose exec backend pytest -q` | 86 tests pass (separate `fraud_test` database) |
+| Backend lint | `docker compose exec backend ruff check .` | no issues |
 | Frontend checks | `docker compose exec frontend npm run lint` / `npm run build` | no errors |
 
 To open the notebook interactively: `ml/.venv/Scripts/jupyter lab`. You can also register the environment as a kernel with `ml/.venv/Scripts/python -m ipykernel install --user --name fraudml`.
@@ -245,6 +279,27 @@ The explanation object (top 10 factors with direction, strength and a `masked` f
 
 ![SHAP importance](reports/figures/shap_importance.png)
 
+## Completed work: scoring API
+
+`POST /api/v1/score` takes one raw transaction (IEEE-CIS field names; only id, time and amount are required). It returns a calibrated fraud probability, the expected loss (probability × amount), the alert decision (expected loss ≥ $21.82), a risk level (low < 5% · medium < 20% · high < 50% · critical), the "unusual pattern" flag and the top 10 plain-language factors. The transaction and its prediction are stored in PostgreSQL.
+
+- **One feature pipeline:** the backend installs the `fraudml` package and calls its online feature path. Only the history lookup is new (the customer's earlier transactions, read from PostgreSQL).
+- **Model registry:** `model_versions` holds each scoring bundle (LightGBM model, calibrator, alert policy, linked Isolation Forest). Registration refuses artifacts trained with another feature encoder or other library versions. At most one bundle is active, and the API loads it at startup.
+- **Safe to retry:** the same transaction sent twice returns the stored prediction; different data under the same id is rejected (409). Ground truth can never be sent (`isFraud` → 422) and is never returned.
+- **Batch scoring** uses the same service for a date range of stored transactions.
+
+**Training–serving consistency, re-checked on PostgreSQL:** for 1,000 random validation and test transactions, features computed by the API path equal the offline training features (0 mismatches over 59 features, largest difference 2e-12), and probabilities are identical. The first test day scored in batch (3,060 transactions) reproduces offline scoring exactly: same probabilities, same 154 alerts, same 2 unusual flags.
+
+Scoring takes about 140 ms per transaction (features 66 ms, Isolation Forest 30 ms, SHAP 24 ms, LightGBM 10 ms, history query 4 ms).
+
+## Completed work: authentication and audit trail
+
+- **Login** (`POST /auth/login`, OAuth2 password form) returns a 15-minute JWT access token, sent as `Authorization: Bearer …`. A 7-day refresh token is set as an **httpOnly cookie** (SameSite=Strict, limited to `/api/v1/auth`), so page scripts cannot read it. `POST /auth/refresh` swaps it for a new one each time. If an already-used refresh token is presented again, it is treated as stolen and all of that user's sessions are revoked. `POST /auth/logout` revokes it.
+- **Stored safely:** passwords are hashed with bcrypt (10 to 72 bytes). Only a SHA-256 hash of each refresh token is stored. A wrong password and an unknown e-mail get the same answer, so the login does not reveal which accounts exist.
+- **Two roles:** analyst and admin. `GET/POST /users` is admin only. The user is re-read on every request, so a deactivated account or a changed role takes effect immediately. `POST /score` needs any logged-in user.
+- **Demo users** come from a seed script, with passwords taken only from `.env`.
+- **Audit trail:** every state-changing action writes one row to `audit_logs` in the same transaction as the change: `auth.login`, `auth.login_failed` (with a reason, never the password), `auth.logout`, `auth.token_reuse`, `user.create`, `model.register` and `model.activate`. **PostgreSQL itself refuses UPDATE, DELETE and TRUNCATE** on this table (trigger), and a user with audit history cannot be deleted. The audit service also refuses any field that looks like a password or token.
+
 ## Key findings
 
 - **Fraud rate: about 3.50%** in the labelled data (20,663 of 590,540; 1 fraud for every 27.6 legitimate transactions), about 113 frauds per day. The weekly rate varies between 2.3% and 4.9%.
@@ -293,17 +348,19 @@ The EDA confirmed strong **label propagation**: when a pseudo customer (`uid = c
 | **Model selection (LightGBM/XGBoost), calibration, cost-based threshold, test evaluation** | ✅ done |
 | **Anomaly detection safety net (Isolation Forest)** | ✅ done |
 | **SHAP explanations (local factors, plain-language reasons, global figures)** | ✅ done |
-| **Scoring API: database schema, model registry, `POST /score`, batch scoring** | ⏭ next |
-| Scoring API, authentication and roles, review queue with audit trail | planned |
+| **Scoring API: database schema, model registry, `POST /score`, batch scoring** | ✅ done |
+| **Authentication and roles, audit trail** | ✅ done |
+| **Review queue and case workflow** | ⏭ next |
 | Analyst dashboard, monitoring (drift, performance), retraining workflow | planned |
 
-**Next stage:** the scoring API. Database schema and migrations, loading transactions, a model registry, `POST /score` (features → calibrated score → safety-net flag → explanation, stored as a prediction), and a batch scoring script.
+**Next stage:** the review queue. Cases created from alerts, then filters, assignment and decisions (confirm fraud / false positive / escalate), all audited.
 
 ## Limitations
 
-- A production model artifact exists but is not served yet: no scoring endpoint or explanation exists. The backend and frontend are skeletons.
+- Activating another model requires restarting the backend. The frontend is still a skeleton.
+- No login rate limiting or account lock-out yet (failed logins are audited). Behind the Vite proxy, the audit log records the proxy's IP, not the browser's. Users cannot be edited, deactivated or have their password reset through the API yet (database only). The audit log is readable through the database (Adminer), not through an API page.
 - Performance drops from validation to test (PR-AUC 0.559 → 0.454) because of drift; probabilities are slightly too high on test (mean 4.2% vs 3.4% fraud rate).
-- Computing features for a single transaction currently takes about 60 ms (shared pandas code, chosen to guarantee consistency with training). It may be optimised when the scoring API is built.
+- Scoring takes about 140 ms per transaction (shared pandas feature code, chosen to guarantee consistency with training). That is fine for single calls; replaying the whole test period (~100k transactions) would take a few hours.
 - Most dataset features are anonymised, which limits how readable explanations can be.
 - The pseudo customer key is an approximation: 11.3% of rows have none, and a few keys group many transactions.
 - The time zone is unknown, so "hour of day" is relative to the reference date.

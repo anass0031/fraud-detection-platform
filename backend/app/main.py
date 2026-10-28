@@ -1,9 +1,36 @@
-from fastapi import FastAPI
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from app.api.v1 import health
+from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.api.v1 import auth, health, score, users
 from app.core.config import get_settings
+from app.db.session import SessionLocal
+from app.services.model_store import store
 
 settings = get_settings()
+log = logging.getLogger("uvicorn.error")
 
-app = FastAPI(title=settings.app_name, version=settings.version)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Load the active scoring bundle once at startup (the API still starts without one)."""
+    try:
+        with SessionLocal() as db:
+            bundle = store.load_active(db)
+    except SQLAlchemyError as exc:
+        bundle, store.error = None, f"database unavailable at startup: {exc.__class__.__name__}"
+    if bundle:
+        log.info("Loaded model %s (anomaly %s)", bundle.version, bundle.anomaly_version)
+    else:
+        log.warning("No scoring model loaded: %s", store.error)
+    yield
+
+
+app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
 app.include_router(health.router, prefix=settings.api_v1_prefix)
+app.include_router(auth.router, prefix=settings.api_v1_prefix)
+app.include_router(users.router, prefix=settings.api_v1_prefix)
+app.include_router(score.router, prefix=settings.api_v1_prefix)

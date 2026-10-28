@@ -38,3 +38,22 @@ def test_history_excludes_current_and_same_second(synthetic):
     if uid == uid:  # uid present
         hist = history.get(uid, before=int(row["TransactionDT"]))
         assert (hist["TransactionDT"] < row["TransactionDT"]).all()
+
+
+def test_online_frame_keeps_categorical_dtypes():
+    from fraudml.features.pipeline import (
+        CATEGORICAL_FEATURES,
+        compute_features_online,
+        compute_features_online_frame,
+    )
+
+    df = make_synthetic(n=120, seed=3)
+    enc, batch, history = _setup(df)
+    txn = df.iloc[50].to_dict()
+    frame = compute_features_online_frame(txn, history, enc)
+    assert len(frame) == 1
+    for col in CATEGORICAL_FEATURES:
+        assert str(frame[col].dtype) == "category"
+        assert list(frame[col].cat.categories) == list(batch[col].cat.categories)
+    series = compute_features_online(txn, history, enc)
+    assert [str(v) for v in frame.iloc[0]] == [str(v) for v in series]

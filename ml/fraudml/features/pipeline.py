@@ -147,6 +147,17 @@ def compute_features_online(
     txn: Mapping, history: HistorySource, encoder: FeatureEncoder
 ) -> pd.Series:
     """Curated features for one transaction. `history` must not contain this transaction."""
+    return compute_features_online_frame(txn, history, encoder).iloc[0]
+
+
+def compute_features_online_frame(
+    txn: Mapping, history: HistorySource, encoder: FeatureEncoder
+) -> pd.DataFrame:
+    """Same as compute_features_online, as a one-row DataFrame.
+
+    The DataFrame keeps the encoder's categorical dtypes, which the model and SHAP need
+    (a Series of one row would turn them into plain objects). Used by the scoring API.
+    """
     row = pd.DataFrame([{c: txn.get(c, np.nan) for c in RAW_INPUT_COLUMNS}])
     uid = make_uid(row)
     raw = row_features(row, uid)
@@ -163,4 +174,4 @@ def compute_features_online(
     )
     for k, v in beh.items():
         raw[k] = v
-    return encoder.transform(raw)[list(FEATURES_CURATED)].iloc[0]
+    return encoder.transform(raw)[list(FEATURES_CURATED)]
