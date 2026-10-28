@@ -44,7 +44,9 @@ def pending_ids(db: Session, model_version_id: int, start: dt.date, end: dt.date
     return list(db.scalars(query))
 
 
-def score_ids(db: Session, bundle: ScoringBundle, ids: list[int], chunk_size: int = 200) -> list:
+def score_ids(
+    db: Session, bundle: ScoringBundle, ids: list[int], chunk_size: int = 200, verbose: bool = True
+) -> list:
     """Score the given transactions, committing after each chunk. Returns the predictions."""
     preds = []
     t0 = time.perf_counter()
@@ -58,6 +60,8 @@ def score_ids(db: Session, bundle: ScoringBundle, ids: list[int], chunk_size: in
         for txn in txns:
             preds.append(score_stored(db, bundle, txn))
         db.commit()
+        if not verbose:
+            continue
         done = i + len(chunk)
         rate = done / (time.perf_counter() - t0)
         left = (len(ids) - done) / rate

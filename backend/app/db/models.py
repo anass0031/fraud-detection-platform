@@ -1,7 +1,5 @@
 """Database tables: transactions, model registry, predictions, users, refresh tokens, audit log,
-review queue (cases, decisions) and settings.
-
-Monitoring tables are added with their own migration.
+review queue (cases, decisions), settings and monitoring (daily metrics, drift).
 """
 
 from __future__ import annotations
@@ -13,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -45,6 +44,7 @@ USER_ROLES = ("analyst", "admin")
 CASE_REASONS = ("model_score", "anomaly")
 CASE_STATUSES = ("new", "assigned", "escalated", "closed")
 DECISIONS = ("confirmed_fraud", "false_positive", "escalate")
+DRIFT_SEVERITIES = ("stable", "moderate", "significant")
 
 
 class Base(DeclarativeBase):
@@ -296,4 +296,72 @@ class Setting(Base):
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class MetricSnapshot(Base):
+    """Performance of one model on one replayed day (labels revealed for that day).
+
+    Counts are stored so that weeks and periods can be summed exactly; PR-AUC is per day.
+    """
+
+    __tablename__ = "metric_snapshots"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_versions.id"))
+    day: Mapped[dt.date] = mapped_column(Date)
+    label_source: Mapped[str] = mapped_column(String(16), server_default="ground_truth")
+    n: Mapped[int] = mapped_column(Integer)
+    n_fraud: Mapped[int] = mapped_column(Integer)
+    alerts: Mapped[int] = mapped_column(Integer)
+    tp: Mapped[int] = mapped_column(Integer)
+    fp: Mapped[int] = mapped_column(Integer)
+    fn: Mapped[int] = mapped_column(Integer)
+    unusual_flags: Mapped[int] = mapped_column(Integer)
+    precision: Mapped[float | None] = mapped_column(Float)
+    recall: Mapped[float | None] = mapped_column(Float)
+    pr_auc: Mapped[float | None] = mapped_column(Float)
+    precision_at_capacity: Mapped[float | None] = mapped_column(Float)
+    fraud_value: Mapped[float] = mapped_column(Float)  # USD of all frauds that day
+    fraud_value_caught: Mapped[float] = mapped_column(Float)  # USD of alerted frauds
+    total_cost: Mapped[float] = mapped_column(Float)
+    no_model_cost: Mapped[float] = mapped_column(Float)
+    net_savings: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "model_version_id", "day", "label_source", name="uq_metric_snapshots_model_day"
+        ),
+        # Only revealed ground truth for now; analyst decisions may become a second source.
+        CheckConstraint("label_source IN ('ground_truth')", name="label_source"),
+    )
+
+
+class DriftReport(Base):
+    """Drift of one feature (or `__score__`) on one day against the training reference."""
+
+    __tablename__ = "drift_reports"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_versions.id"))
+    day: Mapped[dt.date] = mapped_column(Date)
+    feature_name: Mapped[str] = mapped_column(String(64))
+    n: Mapped[int] = mapped_column(Integer)
+    psi: Mapped[float] = mapped_column(Float)
+    ks_stat: Mapped[float | None] = mapped_column(Float)
+    ks_pvalue: Mapped[float | None] = mapped_column(Float)
+    severity: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "model_version_id", "day", "feature_name", name="uq_drift_reports_model_day_feature"
+        ),
+        Index("ix_drift_reports_day", "day"),
+        CheckConstraint(f"severity IN {DRIFT_SEVERITIES}", name="severity"),
     )

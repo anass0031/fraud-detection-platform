@@ -24,6 +24,11 @@ const NAV: NavItem[] = [
     match: (path, search) => path === '/queue' && search.includes('tab=mine'),
   },
   {
+    label: 'Monitoring',
+    to: '/monitoring',
+    match: (path) => path === '/monitoring',
+  },
+  {
     label: 'Threshold and costs',
     to: '/admin/settings',
     adminOnly: true,

@@ -37,6 +37,13 @@ export const routes: RouteObject[] = [
         lazy: async () => ({ Component: (await import('../features/case/CasePage')).CasePage }),
       },
       {
+        path: 'monitoring',
+        // Loaded on first use: charts.
+        lazy: async () => ({
+          Component: (await import('../features/monitoring/MonitoringPage')).MonitoringPage,
+        }),
+      },
+      {
         path: 'admin',
         element: <RequireRole roles={['admin']} />,
         children: [{ path: 'settings', element: <Placeholder title="Threshold and costs" /> }],

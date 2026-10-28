@@ -5,7 +5,7 @@ so a change and its audit row are always saved (or rolled back) together.
 
 Action names: `<entity>.<verb>`, e.g. auth.login, auth.login_failed, auth.logout,
 user.create, model.register, model.activate, case.create (system), case.claim, case.assign,
-case.decide, settings.update.
+case.decide, settings.update, replay.day (system: one replayed test day).
 """
 
 from __future__ import annotations

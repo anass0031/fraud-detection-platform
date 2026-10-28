@@ -2,7 +2,7 @@
 
 An end-of-studies (PFA) project to build a platform that **scores payment transactions for fraud risk**, **explains each score** in plain language, and **ranks suspicious cases** for human review. It is built on the IEEE-CIS Fraud Detection dataset (real e-commerce transactions from Vesta Corporation).
 
-> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations, the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL), **authentication with an append-only audit trail** the **review queue API** (cases, claim/assign, decisions, threshold and cost settings, CSV export) and the **analyst dashboard** (login, review queue, case detail with a SHAP waterfall, decisions and timeline) are complete. Monitoring comes next. See [Project status](#project-status).
+> **Status: in progress.** Data ingestion and exploratory analysis, the time-safe feature pipeline, the evaluation framework, the production model (calibrated LightGBM with a cost-based alert rule, evaluated once on the test period), the anomaly safety net, plain-language SHAP explanations, the **scoring API** (`POST /api/v1/score` and a batch scoring script, with the model registry in PostgreSQL), **authentication with an append-only audit trail** the **review queue API** (cases, claim/assign, decisions, threshold and cost settings, CSV export) the **analyst dashboard** (login, review queue, case detail with a SHAP waterfall, decisions and timeline) and **monitoring** (day-by-day replay of the test period, performance, PSI/KS drift, dashboard page) are complete. Admin pages and retraining come next. See [Project status](#project-status).
 
 ---
 
@@ -22,6 +22,7 @@ An end-of-studies (PFA) project to build a platform that **scores payment transa
 - [Completed work: authentication and audit trail](#completed-work-authentication-and-audit-trail)
 - [Completed work: review queue](#completed-work-review-queue)
 - [Completed work: analyst dashboard](#completed-work-analyst-dashboard)
+- [Completed work: monitoring](#completed-work-monitoring)
 - [Key findings](#key-findings)
 - [Chronological split](#chronological-split)
 - [Leakage safeguards](#leakage-safeguards)
@@ -67,12 +68,12 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 ├── backend/                  # FastAPI app (installs the fraudml package; no copy of feature code)
 │   ├── alembic/              # database migrations (applied on container start)            [implemented]
 │   ├── app/
-│   │   ├── api/v1/           # health, auth, users, POST /score, cases, settings, reports  [implemented]
+│   │   ├── api/v1/           # health, auth, users, POST /score, cases, settings, reports, monitoring [implemented]
 │   │   ├── db/models.py      # transactions, models, predictions, users, audit, cases, settings [implemented]
 │   │   ├── schemas/          # request/response models (raw IEEE-CIS field names)         [implemented]
 │   │   ├── core/security.py  # bcrypt passwords, JWT access tokens, refresh-token hashing [implemented]
-│   │   ├── services/         # history, registry, scoring, loader, auth, users, audit, cases, settings [implemented]
-│   │   └── scripts/          # load_transactions, register_model, score_batch, open_cases, check_skew_db, seed_users [implemented]
+│   │   ├── services/         # history, registry, scoring, loader, auth, users, audit, cases, settings, monitoring [implemented]
+│   │   └── scripts/          # load_transactions, register_model, score_batch, open_cases, replay, compute_monitoring, check_skew_db, seed_users [implemented]
 │   └── tests/                # API, workflow, registry, history, loader, migration tests (separate test DB)
 ├── frontend/                 # React 19 + TypeScript + Vite + Mantine: analyst dashboard    [implemented]
 │   └── src/
@@ -89,6 +90,7 @@ The target system is a web platform: a **FastAPI** backend with **PostgreSQL**, 
 │   │   ├── evaluate/         # metrics, cost model, capacity-constrained threshold        [implemented]
 │   │   ├── models/           # loader, baselines, LightGBM/XGBoost, CV folds, tuning, calibration, anomaly [implemented]
 │   │   ├── explain/          # SHAP contributions, masked-feature groups, plain-language factors [implemented]
+│   │   ├── monitoring/       # drift: reference bins, PSI, KS, severity                    [implemented]
 │   │   └── registry.py       # file-based model artifacts (model.txt + calibrator/metadata JSON) [implemented]
 │   ├── scripts/
 │   │   ├── verify_raw_data.py
@@ -176,7 +178,8 @@ Run from the repository root.
 | Anomaly safety net | `ml/.venv/Scripts/python ml/scripts/train_anomaly.py --save` | Isolation Forest fitted on train (no labels), cut-off = top 0.5% of train; `reports/anomaly_validation.{csv,md}`, figures, artifact `artifacts/models/iforest-<date>-<n>/` (about 15 s) |
 | Safety-net test check (once) | `ml/.venv/Scripts/python ml/scripts/evaluate_anomaly_test.py` | `reports/anomaly_test_results.{json,md}`; refuses a second run (`--dry-run` checks the code on validation) |
 | SHAP explanations | `ml/.venv/Scripts/python ml/scripts/explain_model.py` | additivity and `shap` cross-check, `reports/figures/shap_{importance,beeswarm}.png`, `reports/shap_examples.md` (about 30 s) |
-| ML tests | `ml/.venv/Scripts/python -m pytest ml/tests -q` | 152 tests pass (about 45 s) |
+| Drift reference | `ml/.venv/Scripts/python ml/scripts/build_drift_reference.py --model lgbm-2026.10.27-1` | `artifacts/monitoring/drift_reference-<model>.json` (59 features from train, score from validation; self-check PSI 0; about 6 s) |
+| ML tests | `ml/.venv/Scripts/python -m pytest ml/tests -q` | 165 tests pass (about 70 s) |
 | ML lint | `ml/.venv/Scripts/ruff check ml` | no issues |
 | Run the EDA notebook | `cd ml/notebooks && ../.venv/Scripts/jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1200 01_eda.ipynb` | runs end to end; figures written to `reports/figures/eda/` |
 | Load transactions | `docker compose exec backend python -m app.scripts.load_transactions --until 2018-04-28 --source history` | `inserted 490,555 new rows`; a re-run inserts 0 (about 30 s) |
@@ -188,11 +191,13 @@ Run from the repository root.
 | Open review cases (backfill) | `docker compose exec backend python -m app.scripts.open_cases --from 2018-04-28 --to 2018-04-29` | for predictions stored before the review queue existed: 156 cases (154 model alerts + 2 unusual); a re-run opens 0 |
 | Review queue | `curl -H "Authorization: Bearer <access_token>" "localhost:8000/api/v1/cases?status=new&limit=10"` | the 10 highest-priority open cases and the total |
 | Export cases | `curl -H "Authorization: Bearer <access_token>" -o cases.csv "localhost:8000/api/v1/reports/cases.csv?status=closed"` | CSV with one row per case and its final decision (no ground truth) |
+| Replay test days | `docker compose exec backend python -m app.scripts.replay --from 2018-05-26 --to 2018-05-27 --workers 4` | per day, in order: load → score (opens cases) → reveal labels → monitoring; re-running a day changes nothing; about 5–6 min per day |
+| Recompute monitoring | `docker compose exec backend python -m app.scripts.compute_monitoring --from 2018-04-28 --to 2018-05-26` | daily metrics + drift for every day (about 20 s for 28 days) |
 | Skew check vs PostgreSQL | `docker compose exec backend python -m app.scripts.check_skew_db` | 1,000 rows: 0 feature mismatches, probability difference 0, 0 alert mismatches, `RESULT: PASS` (about 3–5 min; uses the model's own threshold, whatever the admin settings) |
-| Backend tests | `docker compose exec backend pytest -q` | 177 tests pass (separate `fraud_test` database) |
+| Backend tests | `docker compose exec backend pytest -q` | 193 tests pass (separate `fraud_test` database) |
 | Backend lint | `docker compose exec backend ruff check .` | no issues |
 | Frontend checks | `docker compose exec frontend npm run lint` / `npm run format:check` / `npm run build` | no errors (the build also type-checks against the generated API types) |
-| Frontend tests | `docker compose exec frontend npm test` | 87 Vitest tests pass |
+| Frontend tests | `docker compose exec frontend npm test` | 102 Vitest tests pass |
 | Regenerate API types | `docker compose exec frontend npm run gen:api` | rewrites `frontend/src/api/schema.d.ts` from the running backend; no diff when the API is unchanged |
 
 To open the notebook interactively: `ml/.venv/Scripts/jupyter lab`. You can also register the environment as a kernel with `ml/.venv/Scripts/python -m ipykernel install --user --name fraudml`.
@@ -339,6 +344,26 @@ A React + TypeScript web app (Mantine UI, TanStack Query and Table) on top of th
 
 Checks: 87 Vitest tests (token refresh, page guards, URL ↔ filters, the waterfall data and its drawn SVG, decision rules, timeline sentences). On the demo data every one of the 156 explanations adds up exactly.
 
+## Completed work: monitoring
+
+The test period is **replayed day by day through the real system**: each day's transactions are loaded, scored by the API's scoring service (which opens review cases), then that day's labels are revealed for monitoring only (the analyst UI never shows them). 28 days (2018-04-28 → 05-25, 82,233 transactions) are replayed; the last test week is kept for the live demo.
+
+- **Exact check:** the weekly results computed from the replay equal the one-time offline test evaluation for all 4 weeks (transactions, alerts per day, precision, fraud $ caught, net savings, to 3e-16). This verifies loading, customer history, features, scoring, labels and metrics together on real data.
+- **Performance per day** (same code as the offline evaluation): precision and recall of the alerts, PR-AUC, precision within the 150/day capacity, share of fraud dollars caught, total cost and net savings. Daily counts are stored, so weeks and periods are summed exactly.
+- **Drift** against a reference built once: training-period features (10 quantile bins + a missing-value bin, or one bin per category) and validation-period scores. PSI decides the severity (< 0.1 stable, ≤ 0.25 moderate, above significant); KS is reported but not used, since with ~2,900 rows a day its p-value flags harmless differences. `weekday` is not monitored per day (a one-day window always holds one weekday).
+- **Dashboard page** (`/monitoring`, analysts and admins): KPI cards (last 7 days vs the whole period), daily performance chart, alert volume with the capacity line and the open backlog, a drift heatmap (model score + the 15 most drifting features), analyst feedback.
+- **Replay speed:** about 5–6 minutes per day with 4 worker processes (results identical to scoring one by one, checked by the weekly comparison).
+
+| Replayed period (28 days) | Value |
+|---|---|
+| Alerts per day | 151.3 (capacity 150; 14 of 28 days above it) |
+| Precision / recall of alerts | 24.0% / 37.9% |
+| PR-AUC | 0.440 |
+| Fraud $ caught | 63.9% |
+| Net savings | $219,148 |
+
+**What the drift shows:** the four normalised "days since" features (`D1n`, `D4n`, `D10n`, `D15n`) drift strongly every day (PSI 1.3–2.4) because they grow with the calendar, and the `M1`–`M9` match flags drift on most days (PSI ≈ 0.6). Yet **the model's score distribution stays stable on 27 of 28 days** (mean PSI 0.03), and precision holds. The exception is 2018-05-21 (score PSI 0.32, only 83 alerts): exactly the kind of day the dashboard is meant to surface.
+
 ## Key findings
 
 - **Fraud rate: about 3.50%** in the labelled data (20,663 of 590,540; 1 fraud for every 27.6 legitimate transactions), about 113 frauds per day. The weekly rate varies between 2.3% and 4.9%.
@@ -391,17 +416,18 @@ The EDA confirmed strong **label propagation**: when a pseudo customer (`uid = c
 | **Authentication and roles, audit trail** | ✅ done |
 | **Review queue and case workflow (API)** | ✅ done |
 | **Analyst dashboard (frontend)** | ✅ done |
-| **Monitoring (day-by-day replay, drift, performance, dashboard page)** | ⏭ next |
-| Admin pages (models, threshold and costs), retraining workflow | planned |
+| **Monitoring (day-by-day replay, drift, performance, dashboard page)** | ✅ done |
+| **Admin pages (models, threshold and costs), retraining workflow** | ⏭ next |
 
-**Next stage:** monitoring: replay the test period day by day, measure drift (PSI/KS) and performance, and show them on a dashboard page.
+**Next stage:** admin: model list/compare/activate, the threshold and costs page, and an offline retraining script that uses the replayed labels.
 
 ## Limitations
 
 - Activating another model requires restarting the backend. The admin pages (threshold and costs, models) are placeholders until the admin step; the CSV export has an API endpoint but no button yet.
 - No login rate limiting or account lock-out yet (failed logins are audited). Behind the Vite proxy, the audit log records the proxy's IP, not the browser's. Users cannot be edited, deactivated or have their password reset through the API yet (database only). The audit log is readable through the database (Adminer) and per case through the timeline endpoint, not through a full audit page. Case comments and bulk assignment are not implemented (the decision carries a comment). A prediction does not store the threshold in force when it was made (the audit trail records each threshold change).
 - Performance drops from validation to test (PR-AUC 0.559 → 0.454) because of drift; probabilities are slightly too high on test (mean 4.2% vs 3.4% fraud rate).
-- Scoring takes about 140 ms per transaction (shared pandas feature code, chosen to guarantee consistency with training). That is fine for single calls; replaying the whole test period (~100k transactions) would take a few hours.
+- Scoring takes about 140–240 ms per transaction (shared pandas feature code, chosen to guarantee consistency with training). That is fine for single calls; replaying one day takes about 5–6 minutes even with 4 worker processes.
+- Labels of a replayed day are revealed at once (real chargebacks arrive weeks later). The ~4,300 replayed cases stay open in the queue, since nobody reviews them.
 - Most dataset features are anonymised, which limits how readable explanations can be.
 - The pseudo customer key is an approximation: 11.3% of rows have none, and a few keys group many transactions.
 - The time zone is unknown, so "hour of day" is relative to the reference date.

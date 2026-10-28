@@ -338,10 +338,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/monitoring/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Performance
+         * @description Daily performance of the active model on days whose labels are revealed, with exact
+         *     totals for the period and for its last 7 days (PR-AUC recomputed, not averaged).
+         */
+        get: operations["performance_api_v1_monitoring_performance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Drift
+         * @description PSI per feature and day against the training reference (features sorted by their
+         *     highest PSI), and the drift of the model's score.
+         */
+        get: operations["drift_api_v1_monitoring_drift_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Alerts
+         * @description Cases opened per transaction day (model alerts, unusual patterns) and the open backlog.
+         */
+        get: operations["alerts_api_v1_monitoring_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feedback
+         * @description Analyst decisions and how often they agree with the model (and, once revealed, with
+         *     the labels: counts only).
+         */
+        get: operations["feedback_api_v1_monitoring_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlertDay */
+        AlertDay: {
+            /**
+             * Day
+             * Format: date
+             * @description Transaction day
+             */
+            day: string;
+            /** Model Alerts */
+            model_alerts: number;
+            /** Unusual */
+            unusual: number;
+            /**
+             * Open
+             * @description Cases of that day still open now
+             */
+            open: number;
+            /** Closed */
+            closed: number;
+        };
+        /** AlertsResponse */
+        AlertsResponse: {
+            /** Days */
+            days: components["schemas"]["AlertDay"][];
+            /**
+             * Backlog
+             * @description Open cases now, by status
+             */
+            backlog: {
+                [key: string]: number;
+            };
+            /** Capacity Per Day */
+            capacity_per_day: number;
+        };
         /** AssignRequest */
         AssignRequest: {
             /**
@@ -599,6 +716,88 @@ export interface components {
              */
             comment?: string | null;
         };
+        /** DriftCell */
+        DriftCell: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Psi */
+            psi: number;
+            /** Severity */
+            severity: string;
+        };
+        /** DriftResponse */
+        DriftResponse: {
+            /** Model Version */
+            model_version: string | null;
+            /** Days */
+            days: string[];
+            /**
+             * Features
+             * @description Sorted by max PSI, highest first
+             */
+            features: components["schemas"]["FeatureDrift"][];
+            /**
+             * Score
+             * @description Drift of the model's score distribution
+             */
+            score: components["schemas"]["ScoreDrift"][];
+            /**
+             * Thresholds
+             * @description PSI bands: moderate / significant
+             */
+            thresholds: {
+                [key: string]: number;
+            };
+        };
+        /** FeatureDrift */
+        FeatureDrift: {
+            /** Feature */
+            feature: string;
+            /** Max Psi */
+            max_psi: number;
+            /** Mean Psi */
+            mean_psi: number;
+            /** Latest Psi */
+            latest_psi: number;
+            /** Latest Severity */
+            latest_severity: string;
+            /** Days Significant */
+            days_significant: number;
+            /** Cells */
+            cells: components["schemas"]["DriftCell"][];
+        };
+        /** FeedbackResponse */
+        FeedbackResponse: {
+            /**
+             * Decisions
+             * @description Decisions recorded, by type
+             */
+            decisions: {
+                [key: string]: number;
+            };
+            /** Cases Closed */
+            cases_closed: number;
+            /**
+             * Confirmed Share
+             * @description Closed cases confirmed as fraud: how often analysts agree with the model
+             */
+            confirmed_share: number | null;
+            /**
+             * Checked Against Labels
+             * @description Closed cases whose label is revealed
+             */
+            checked_against_labels: number;
+            /** Matching Labels */
+            matching_labels: number;
+            /**
+             * Mean Hours To Decision
+             * @description Case opened -> closed (not meaningful for replayed days: opened in bulk)
+             */
+            mean_hours_to_decision: number | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -654,6 +853,105 @@ export interface components {
             loaded_at?: string | null;
             /** Error */
             error?: string | null;
+        };
+        /** PerformanceResponse */
+        PerformanceResponse: {
+            /** Model Version */
+            model_version: string | null;
+            /** Days */
+            days: components["schemas"]["PerformanceRow"][];
+            /** @description The whole requested period */
+            total: components["schemas"]["PerformanceTotals"] | null;
+            /** @description The last 7 days of the period */
+            last_7_days: components["schemas"]["PerformanceTotals"] | null;
+        };
+        /** PerformanceRow */
+        PerformanceRow: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** N */
+            n: number;
+            /** N Fraud */
+            n_fraud: number;
+            /** Alerts */
+            alerts: number;
+            /** Tp */
+            tp: number;
+            /** Fp */
+            fp: number;
+            /** Fn */
+            fn: number;
+            /**
+             * Precision
+             * @description Share of alerts that were fraud
+             */
+            precision: number | null;
+            /**
+             * Recall
+             * @description Share of frauds that were alerted
+             */
+            recall: number | null;
+            /** Pr Auc */
+            pr_auc: number | null;
+            /**
+             * Precision At Capacity
+             * @description Precision of the day's top-k
+             */
+            precision_at_capacity: number | null;
+            /**
+             * Fraud Value Caught
+             * @description Share of fraud $ inside the alerts
+             */
+            fraud_value_caught: number | null;
+            /** Total Cost */
+            total_cost: number;
+            /** No Model Cost */
+            no_model_cost: number;
+            /** Net Savings */
+            net_savings: number;
+        };
+        /** PerformanceTotals */
+        PerformanceTotals: {
+            /**
+             * First Day
+             * Format: date
+             */
+            first_day: string;
+            /**
+             * Last Day
+             * Format: date
+             */
+            last_day: string;
+            /** Days */
+            days: number;
+            /** N */
+            n: number;
+            /** N Fraud */
+            n_fraud: number;
+            /** Alerts */
+            alerts: number;
+            /** Alerts Per Day */
+            alerts_per_day: number;
+            /** Precision */
+            precision: number | null;
+            /** Recall */
+            recall: number | null;
+            /**
+             * Pr Auc
+             * @description Recomputed on all labelled rows of the period
+             */
+            pr_auc: number | null;
+            /** Fraud Value Caught */
+            fraud_value_caught: number | null;
+            /** Total Cost */
+            total_cost: number;
+            /** No Model Cost */
+            no_model_cost: number;
+            /** Net Savings */
+            net_savings: number;
         };
         /** PredictionOut */
         PredictionOut: {
@@ -724,6 +1022,20 @@ export interface components {
              * @description Plain-language sentence for analysts
              */
             text: string;
+        };
+        /** ScoreDrift */
+        ScoreDrift: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Psi */
+            psi: number;
+            /** Ks Stat */
+            ks_stat: number | null;
+            /** Severity */
+            severity: string;
         };
         /** ScoreResponse */
         ScoreResponse: {
@@ -1661,6 +1973,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    performance_api_v1_monitoring_performance_get: {
+        parameters: {
+            query?: {
+                /** @description First day, inclusive */
+                from?: string | null;
+                /** @description Last day, inclusive */
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drift_api_v1_monitoring_drift_get: {
+        parameters: {
+            query?: {
+                /** @description First day, inclusive */
+                from?: string | null;
+                /** @description Last day, inclusive */
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_api_v1_monitoring_alerts_get: {
+        parameters: {
+            query?: {
+                /** @description First day, inclusive */
+                from?: string | null;
+                /** @description Last day, inclusive */
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feedback_api_v1_monitoring_feedback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
                 };
             };
         };
