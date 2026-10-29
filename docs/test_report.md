@@ -1,11 +1,11 @@
 # Test report
 
-Measured on 2026-10-28 (Windows 11, Docker Desktop). All suites pass.
+Measured on 2026-10-29 (Windows 11, Docker Desktop). All suites pass.
 
 | Part | Tests | Coverage | Command |
 |---|---:|---|---|
 | ML package (`fraudml`) | **182** | **96.2%** of lines + branches | `ml/.venv/Scripts/python -m pytest ml/tests -q --cov=fraudml --cov-config=ml/pyproject.toml` |
-| Backend (FastAPI) | **210** | **84.1%** overall · **services 97.6%** of lines (89.7% of branches) | `docker compose exec backend pytest -q --cov` |
+| Backend (FastAPI) | **215** | **83.6%** overall · **services 97.6%** of lines (89.7% of branches) | `docker compose exec backend pytest -q --cov` |
 | Frontend (React) | **145** | **96.0%** of lines · 88.3% of branches | `docker compose exec frontend npm run coverage` |
 
 Target from the specification: at least 60% on the backend services. **Met: 97.6%.**
@@ -18,9 +18,9 @@ Target from the specification: at least 60% on the backend services. **Met: 97.6
 | `services/` (business logic) | 97.6% | 89.7% | scoring, cases, audit, settings, monitoring, model store / promotion |
 | `db/`, `schemas/` | 100% | 100% | |
 | `core/` (config, security) | 97.4% | 83.3% | |
-| `scripts/` (command-line tools) | 40.9% | 28.3% | see below |
+| `scripts/` (command-line tools) | 49.3% | 38.0% | see below |
 
-**Why the scripts are lower:** each script is a thin command-line wrapper (argument parsing, printing) around functions that *are* tested (`replay_day`, `score_pending`, `compute_day`, `export_frame`, `open_cases`, `register`, the loader). The wrappers themselves were exercised on the real data many times and their results checked: the replay of 28 days (re-run = no change), the weekly comparison with the offline test evaluation (identical for all 4 weeks), the skew check against PostgreSQL (`RESULT: PASS`), the retraining export (82,233 rows). `check_skew_db` is itself a verification tool.
+**Why the scripts are lower:** each script is a thin command-line wrapper (argument parsing, printing) around functions that *are* tested (`replay_day`, `score_pending`, `compute_day`, `export_frame`, `open_cases`, `register`, the loader). The wrappers themselves were exercised on the real data many times and their results checked: the replay of 28 days (re-run = no change), the weekly comparison with the offline test evaluation (identical for all 4 weeks), the skew check against PostgreSQL (`RESULT: PASS`), the retraining export (82,233 rows). `check_skew_db` is itself a verification tool. `demo_check` is tested both ways: a ready database passes, and each broken precondition (missing artifacts or drift reference, wrong password, unknown user, demo day already loaded, stale model in the API, frontend down) fails with a hint.
 
 ## What the tests cover (highlights)
 

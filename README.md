@@ -135,7 +135,7 @@ The model versions used in this repository are `lgbm-2026.10.27-1` and `iforest-
 | Part | Tests | Coverage | Command |
 |---|---:|---|---|
 | ML package | 182 | 96% | `ml/.venv/Scripts/python -m pytest ml/tests -q` |
-| Backend | 210 | services 97.6% | `docker compose exec backend pytest -q` |
+| Backend | 215 | services 97.6% | `docker compose exec backend pytest -q` |
 | Frontend | 145 | 96% of lines | `docker compose exec frontend npm test` |
 
 Beyond unit tests, end-to-end checks on real data: the training–serving **skew check** against PostgreSQL (`RESULT: PASS`), the **replay** reproducing the offline test evaluation week by week, and click-throughs of every page. Details, coverage per area and what is not covered: [docs/test_report.md](docs/test_report.md).
@@ -150,6 +150,7 @@ Beyond unit tests, end-to-end checks on real data: the training–serving **skew
 | [docs/commands.md](docs/commands.md) | Every command with its expected result |
 | [docs/test_report.md](docs/test_report.md) | Test counts and coverage |
 | [docs/demo_script.md](docs/demo_script.md) | 15-minute demo flow, pre-demo check, database snapshot and restore |
+| [docs/defense_material.md](docs/defense_material.md) | Slide outline with figures and sourced numbers, backup-recording shot list |
 | [docs/features.md](docs/features.md) · [docs/eda_findings.md](docs/eda_findings.md) | Feature dictionary · one-page EDA summary |
 | [reports/](reports/) | Tables and figures of every experiment |
 
