@@ -7,13 +7,19 @@ import { routes } from './router'
 
 function findRoute(path: string) {
   const app = routes.find((r) => r.path === '/')!
-  return app.children!.find((r) => r.path === path)!
+  const direct = app.children!.find((r) => r.path === path)
+  if (direct) return direct
+  const [parent, child] = path.split('/') // nested, e.g. admin/models
+  return app.children!.find((r) => r.path === parent)!.children!.find((r) => r.path === child)!
 }
 
 describe('routes', () => {
   it.each([
     ['queue', 'QueuePage'],
     ['cases/:caseId', 'CasePage'],
+    ['monitoring', 'MonitoringPage'],
+    ['admin/settings', 'SettingsPage'],
+    ['admin/models', 'ModelsPage'],
   ])('%s loads its page on demand', async (path, name) => {
     const route = findRoute(path)
     expect(route.element).toBeUndefined()

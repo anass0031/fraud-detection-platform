@@ -39,6 +39,7 @@ serve = [
 ]
 dev = [
     "pytest>=8.3",
+    "pytest-cov>=6.0",
     "ruff>=0.8",
 ]
 
@@ -62,3 +63,12 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["fraudml"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1

@@ -7,6 +7,10 @@ import { ADMIN, ANALYST, fakeAuth, renderRoutes } from '../../test/render'
 import type { CaseRow } from './api'
 import { QueuePage } from './QueuePage'
 
+// The real download is tested in exportCsv.test.ts; here only the button wiring.
+const download = vi.hoisted(() => vi.fn(async (_query: unknown) => 'cases-20261028.csv'))
+vi.mock('./exportCsv', () => ({ downloadCasesCsv: download }))
+
 const fetchMock = vi.fn<typeof fetch>()
 beforeEach(() => {
   fetchMock.mockReset()
@@ -198,5 +202,30 @@ describe('claim and assign', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Bob Analyst' }))
     expect(await screen.findByText('Case 122 assigned to Bob Analyst')).toBeInTheDocument()
     expect(body).toEqual({ user_id: 5 })
+  })
+})
+
+describe('amount filter and export', () => {
+  it('applies a minimum amount once typing pauses, and keeps it in the URL', async () => {
+    serve([caseRow()])
+    const { router } = renderRoutes(routes, '/queue', fakeAuth(ANALYST))
+    await userEvent.type(await screen.findByLabelText('Min amount'), '250')
+    await waitFor(() => expect(lastQuery().get('amount_min')).toBe('250'), { timeout: 3000 })
+    expect(router.state.location.search).toBe('?min=250')
+    // One request for the final value, not one per keystroke.
+    const values = fetchMock.mock.calls
+      .map(([input]) => new URL((input as Request).url).searchParams.get('amount_min'))
+      .filter(Boolean)
+    expect(values).toEqual(['250'])
+  })
+
+  it('exports the cases of the current view', async () => {
+    serve([caseRow()], 12)
+    renderRoutes(routes, '/queue?risk=critical', fakeAuth(ANALYST))
+    await screen.findByRole('row', { name: 'Case 122' })
+    await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+    await waitFor(() => expect(download).toHaveBeenCalledOnce())
+    expect(download.mock.calls[0][0]).toMatchObject({ status: ['new'], risk_level: ['critical'] })
+    expect(await screen.findByText('Downloaded cases-20261028.csv')).toBeInTheDocument()
   })
 })
